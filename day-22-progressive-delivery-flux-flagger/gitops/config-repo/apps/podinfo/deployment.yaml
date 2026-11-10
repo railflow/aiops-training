@@ -1,0 +1,27 @@
+# The app Flagger will manage. To release a new version, change the image tag in a commit: that is the whole "deploy".
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: podinfo, namespace: podinfo, labels: {app: podinfo}}
+spec:
+  minReadySeconds: 5
+  revisionHistoryLimit: 3
+  progressDeadlineSeconds: 120
+  selector: {matchLabels: {app: podinfo}}
+  template:
+    metadata:
+      labels: {app: podinfo}
+    spec:
+      securityContext: {runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: podinfod
+          image: ghcr.io/stefanprodan/podinfo:6.7.1
+          command: ["./podinfo", "--port=9898", "--level=info"]
+          ports: [{name: http, containerPort: 9898}]
+          env:
+            - {name: PODINFO_UI_COLOR, value: "#34577c"}
+          readinessProbe: {httpGet: {path: /readyz, port: http}, periodSeconds: 5, failureThreshold: 2}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 10, failureThreshold: 3}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 20m, memory: 32Mi}
+            limits: {memory: 128Mi}

@@ -1,0 +1,7 @@
+# Lets a node drain proceed while keeping at least one pod of the app serving.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: patch-demo, namespace: patch-demo}
+spec:
+  minAvailable: 1
+  selector: {matchLabels: {app: patch-demo}}

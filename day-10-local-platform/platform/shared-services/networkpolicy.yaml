@@ -1,0 +1,12 @@
+# Only namespaces labelled platform/uses-data=true may reach the shared services. `platform new` adds the label.
+# Needs a CNI that enforces NetworkPolicy (Calico, Day 6). On kindnet this is documentation, not protection.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-labelled-namespaces, namespace: platform-data}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {platform/uses-data: "true"}}
+      ports: [{port: 5432}, {port: 8333}, {port: 4222}]

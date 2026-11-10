@@ -1,0 +1,35 @@
+# Writes a row every minute. Needs the Day 4 secret and image hello-py-app:1.0.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hello-cron
+spec:
+  schedule: "*/1 * * * *"          # minute hour day-of-month month day-of-day
+  concurrencyPolicy: Forbid        # skip a run if the previous one is still going
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: hello
+              image: hello-py-app:1.0
+              imagePullPolicy: IfNotPresent
+              command: ["python", "hello_db.py"]
+              env:
+                - name: NAME
+                  value: "cron"
+                - name: PGHOST
+                  value: postgres.data
+                - name: PGDATABASE
+                  value: app
+                - name: PGUSER
+                  value: app
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: db-credentials
+                      key: PGPASSWORD

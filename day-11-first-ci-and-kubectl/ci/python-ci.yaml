@@ -1,0 +1,56 @@
+# First CI pipeline for the Python app, in the hello-apps repo (copy to .forgejo/workflows/python-ci.yaml).
+# Everything happens inside the job, so it is slow on purpose: Day 12 and Day 13 fix that.
+name: python-ci
+on:
+  push:
+    paths:
+      - "python-hello/**"
+      - ".forgejo/workflows/python-ci.yaml"
+env:
+  REGISTRY: nexus.platform.svc.cluster.local:5000
+  IMAGE: hello-py-app
+  DOCKER_HOST: tcp://127.0.0.1:2375
+jobs:
+  build:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Install tools (slow, repeated on every run)"
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq python3-venv python3-pip docker.io curl jq > /dev/null
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.58.1
+          trivy --version
+
+      - name: Unit tests and coverage
+        working-directory: python-hello
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install -q -r requirements-dev.txt
+          /tmp/venv/bin/pytest --cov=. --cov-report=term --cov-report=xml --junitxml=junit.xml
+
+      - name: Scan the source tree (dependencies and secrets)
+        run: trivy fs --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 0 python-hello
+
+      - name: Build image
+        run: docker build -f python-hello/Dockerfile.app -t "$REGISTRY/$IMAGE:${{ github.sha }}" python-hello
+
+      - name: Scan the image
+        run: |
+          mkdir -p reports
+          trivy image --severity HIGH,CRITICAL --format json --output reports/trivy-image.json "$REGISTRY/$IMAGE:${{ github.sha }}"
+          jq '[.Results[]?.Vulnerabilities[]?] | length' reports/trivy-image.json
+
+      - name: Push image to Nexus
+        run: |
+          echo "${{ secrets.NEXUS_PASSWORD }}" | docker login "$REGISTRY" -u "${{ secrets.NEXUS_USER }}" --password-stdin
+          docker push "$REGISTRY/$IMAGE:${{ github.sha }}"
+
+      - name: Collect reports
+        run: cp python-hello/junit.xml python-hello/coverage.xml reports/
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: reports
+          path: reports/

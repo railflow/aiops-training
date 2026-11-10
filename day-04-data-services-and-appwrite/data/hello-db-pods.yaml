@@ -1,0 +1,53 @@
+# One-shot pods that write a row to Postgres. Day 5 turns these into Jobs.
+# Needs: kubectl create secret generic db-credentials --from-literal=PGPASSWORD="$DB_PASSWORD"
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hello-db-python
+spec:
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: hello-py-app:1.0
+      imagePullPolicy: IfNotPresent
+      command: ["python", "hello_db.py"]
+      env:
+        - name: NAME
+          value: "Python pod"
+        - name: PGHOST
+          value: postgres.data
+        - name: PGDATABASE
+          value: app
+        - name: PGUSER
+          value: app
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: PGPASSWORD
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hello-db-java
+spec:
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: hello-java-app:1.0
+      imagePullPolicy: IfNotPresent
+      command: ["java", "-cp", "/app/app.jar", "com.example.HelloDb"]
+      env:
+        - name: NAME
+          value: "Java pod"
+        - name: PGHOST
+          value: postgres.data
+        - name: PGDATABASE
+          value: app
+        - name: PGUSER
+          value: app
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: PGPASSWORD

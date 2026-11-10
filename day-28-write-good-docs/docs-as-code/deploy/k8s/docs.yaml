@@ -1,0 +1,61 @@
+# Docs site on the cluster at http://docs.localhost:8080. Image built from deploy/Dockerfile and loaded into kind or pushed to Nexus.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: docs
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: docs, namespace: docs, labels: {app: docs}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: docs}}
+  template:
+    metadata: {labels: {app: docs}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 101, runAsGroup: 101, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: nginx
+          image: localhost:30500/docs-site:1.0       # Nexus from your laptop; use nexus.platform.svc.cluster.local:5000 from inside the cluster per your registry setup
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 5, periodSeconds: 20}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {sizeLimit: 64Mi}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: docs, namespace: docs}
+spec:
+  selector: {app: docs}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata: {name: docs, namespace: docs}
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`docs.localhost`)
+      kind: Rule
+      # For internal-only docs, add the forward-auth middleware from Day 7 here so only signed-in staff can read them.
+      services: [{name: docs, port: 80}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: docs-ingress-only, namespace: docs}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports: [{port: 8080}]       # tighten with a from: selector for your Traefik namespace (Day 7)
+  egress: []                       # a static site calls nothing

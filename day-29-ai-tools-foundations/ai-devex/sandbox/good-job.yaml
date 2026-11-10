@@ -1,0 +1,36 @@
+# A sandbox Job for an untrusted agent: no privileges, no host access, no cluster API token, no network except what the policy allows.
+apiVersion: batch/v1
+kind: Job
+metadata: {name: agent-run-1234, namespace: agents}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata: {labels: {app: agent-sandbox}}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: agent
+          image: registry.example.internal/agent-sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 500m, memory: 1Gi}, limits: {cpu: "2", memory: 2Gi, ephemeral-storage: 2Gi}}
+          env:
+            - name: FORGEJO_TOKEN
+              valueFrom: {secretKeyRef: {name: agent-run-1234-token, key: token}}
+          volumeMounts: [{name: work, mountPath: /work}]
+      volumes: [{name: work, emptyDir: {sizeLimit: 2Gi}}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: agent-sandbox-default-deny, namespace: agents}
+spec:
+  podSelector: {matchLabels: {app: agent-sandbox}}
+  policyTypes: [Ingress, Egress]
+  egress:
+    - to: [{podSelector: {matchLabels: {app: llm-gateway}}}]
+      ports: [{port: 8080}]
+    - to: [{podSelector: {matchLabels: {app: forgejo}}}]
+      ports: [{port: 3000}]

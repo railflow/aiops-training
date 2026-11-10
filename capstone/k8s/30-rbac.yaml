@@ -1,0 +1,24 @@
+# The worker may create and delete Jobs and per-run Secrets in THIS namespace and read their logs. Nothing cluster-wide.
+# Agent pods use a different ServiceAccount with no Role at all, and the token is not even mounted: "no cluster credentials in the pod".
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: capstone-worker, namespace: capstone}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: capstone-agent, namespace: capstone}
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: capstone-worker, namespace: capstone}
+rules:
+  - {apiGroups: ["batch"], resources: [jobs], verbs: [create, get, list, watch, delete]}
+  - {apiGroups: [""], resources: [pods, pods/log], verbs: [get, list]}
+  - {apiGroups: [""], resources: [secrets], verbs: [create, get, delete]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: capstone-worker, namespace: capstone}
+subjects: [{kind: ServiceAccount, name: capstone-worker, namespace: capstone}]
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: capstone-worker}

@@ -1,0 +1,23 @@
+# Re-open exactly one path: pods labelled app=python-api in namespace frontend may reach the Java API on 8080.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-python-api-to-java-api
+  namespace: backend
+spec:
+  podSelector:
+    matchLabels:
+      app: java-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: frontend
+          podSelector:
+            matchLabels:
+              app: python-api
+      ports:
+        - protocol: TCP
+          port: 8080

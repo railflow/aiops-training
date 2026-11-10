@@ -1,0 +1,83 @@
+# Two deployments of the SAME image (shop-observability:1.0): a frontend that calls a backend.
+# Telemetry goes to the gateway collector; faults are OFF unless you set INJECT_* (see app.py).
+apiVersion: v1
+kind: Namespace
+metadata: {name: apps}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: shop-backend, namespace: apps, labels: {app: shop-backend}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: shop-backend}}
+  template:
+    metadata: {labels: {app: shop-backend}}
+    spec:
+      containers:
+        - name: shop
+          image: shop-observability:1.0
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: OTEL_SERVICE_NAME, value: shop-backend}
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-gateway.observability:4318"}
+            - {name: OTEL_RESOURCE_ATTRIBUTES, value: "deployment.environment=local,k8s.cluster.name=ai-ops-training"}
+            - {name: INJECT_ERROR_RATE, value: "0"}
+            - {name: INJECT_LATENCY_MS, value: "0"}
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 3, periodSeconds: 5}
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: shop-backend, namespace: apps}
+spec:
+  selector: {app: shop-backend}
+  ports: [{name: http, port: 80, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: shop-frontend, namespace: apps, labels: {app: shop-frontend}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: shop-frontend}}
+  template:
+    metadata: {labels: {app: shop-frontend}}
+    spec:
+      containers:
+        - name: shop
+          image: shop-observability:1.0
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: OTEL_SERVICE_NAME, value: shop-frontend}
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-gateway.observability:4318"}
+            - {name: OTEL_RESOURCE_ATTRIBUTES, value: "deployment.environment=local,k8s.cluster.name=ai-ops-training"}
+            - {name: BACKEND_URL, value: "http://shop-backend"}
+            - {name: INJECT_ERROR_RATE, value: "0"}
+            - {name: INJECT_LATENCY_MS, value: "0"}
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}, initialDelaySeconds: 3, periodSeconds: 5}
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: shop-frontend, namespace: apps}
+spec:
+  selector: {app: shop-frontend}
+  ports: [{name: http, port: 80, targetPort: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: shop, namespace: apps}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: shop.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: shop-frontend, port: {number: 80}}}

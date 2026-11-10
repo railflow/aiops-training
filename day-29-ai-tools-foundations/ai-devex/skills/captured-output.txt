@@ -1,0 +1,10 @@
+skills/examples/bad-skill/SKILL.md: ERROR name 'Helper' must be lowercase-with-hyphens
+skills/examples/bad-skill/SKILL.md: ERROR name 'Helper' does not match its folder 'bad-skill'
+skills/examples/bad-skill/SKILL.md: ERROR description under 40 characters: the agent picks skills by description, so say what it does and WHEN to use it
+skills/examples/bad-skill/SKILL.md: ERROR looks like it contains a secret
+skills/examples/bad-skill/SKILL.md: ERROR pipes a download into a shell
+skills/examples/bad-skill/SKILL.md: ERROR prompt-injection phrase
+skills/examples/bad-skill/SKILL.md: ERROR asks the agent to hide actions from the user
+skills/examples/bad-skill/SKILL.md: warn  no 'owner' in front matter (needed for curation and pruning)
+skills/examples/bad-skill/SKILL.md: warn  no 'version' in front matter (needed for curation and pruning)
+skills/examples/write-runbook/SKILL.md: ok

@@ -1,0 +1,10 @@
+{
+  "version": "0.2",
+  "language": "en,en-GB",
+  "ignorePaths": ["node_modules", "dist", ".astro"],
+  "ignoreRegExpList": ["/`[^`]*`/", "/```[\\s\\S]*?```/"],
+  "words": [
+    "heyjob", "kubectl", "kustomize", "Kustomization", "configmap", "ConfigMap", "Traefik", "OpenBao", "Forgejo", "Flagger",
+    "mermaid", "Starlight", "Diataxis", "ClickHouse", "Gatus", "PGHOST", "Temporal", "Appwrite", "SeaweedFS", "Nexus"
+  ]
+}

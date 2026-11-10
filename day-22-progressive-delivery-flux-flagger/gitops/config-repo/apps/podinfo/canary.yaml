@@ -1,0 +1,41 @@
+# The release policy as code. Flagger sees the Deployment's pod template change, then:
+# scale up the canary, run the checks, move 10% more traffic every 15 s up to 50%, then promote to primary.
+# 3 failed checks in a row (threshold) means: route all traffic back to primary, scale the canary to zero, mark it failed.
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata: {name: podinfo, namespace: podinfo}
+spec:
+  provider: traefik
+  targetRef: {apiVersion: apps/v1, kind: Deployment, name: podinfo}
+  progressDeadlineSeconds: 120
+  service:
+    port: 80
+    targetPort: 9898
+  analysis:
+    interval: 15s
+    threshold: 3
+    maxWeight: 50
+    stepWeight: 10
+    metrics:
+      - name: request-success-rate
+        interval: 1m
+        thresholdRange: {min: 99}        # percent of non-5xx responses
+      - name: request-duration
+        interval: 1m
+        thresholdRange: {max: 500}       # milliseconds, p99
+    webhooks:
+      - name: smoke-test
+        type: pre-rollout
+        url: http://flagger-loadtester.podinfo/
+        timeout: 15s
+        metadata:
+          type: bash
+          cmd: "curl -s http://podinfo-canary.podinfo/version | grep -q version"
+      - name: load-test
+        type: rollout
+        url: http://flagger-loadtester.podinfo/
+        timeout: 5s
+        metadata:
+          type: cmd
+          cmd: "hey -z 5m -q 10 -c 2 -host podinfo.localhost http://traefik.traefik"
+          logCmdOutput: "true"

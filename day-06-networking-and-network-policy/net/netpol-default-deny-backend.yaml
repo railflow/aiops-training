@@ -1,0 +1,10 @@
+# Select every pod in namespace backend and allow NO ingress. (Needs a CNI that enforces NetworkPolicy.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: backend
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress

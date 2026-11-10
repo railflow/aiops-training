@@ -1,0 +1,21 @@
+
+=== ADK, pause for confirmation, answered by a different process ===
+  process 1 exited with 0 and says {'paused_for_confirmation': True, 'final': None}; steps done: ['run_tests', 'write_test_file', 'run_tests', 'git_commit']
+  ok: the run stopped at the confirmation request and the process is gone (nothing waits in memory)
+  process 2: {'paused_for_confirmation': False, 'final': 'finished billing-001: 5 steps done'}
+  ok: a new process answered the confirmation from the SQLite session and the run finished
+  ok: no finished tool ran again
+  ok: one pull request
+
+=== ADK, a process dies inside a tool call; a supervisor resumes the invocation ===
+  process 1 exited with 137 (137 = killed inside write_test_file)
+  ok: the process died inside the tool call
+  process 2 (resume): {'paused_for_confirmation': True, 'final': None}
+  ok: the resumed run continued to the confirmation request
+  ok: and finished after the approval
+  write_test_file started 2x, finished 1x
+  ok: the interrupted tool ran again: tools are at-least-once
+  ok: the other tools ran once each
+  ok: one pull request
+
+all scenarios held

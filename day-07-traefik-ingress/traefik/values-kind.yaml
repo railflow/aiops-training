@@ -1,0 +1,55 @@
+# Helm values for Traefik on the kind cluster ai-ops-training. Always compare with the chart you install:
+#   helm show values traefik/traefik | less
+deployment:
+  replicas: 1
+
+# kind has no cloud load balancer, so bind the entrypoints to the node's own ports 80/443 (hostPort).
+# kind-config.yaml maps host 8080 -> node 80 and host 8443 -> node 443.
+ports:
+  web:
+    hostPort: 80
+  websecure:
+    hostPort: 443
+
+service:
+  type: ClusterIP
+
+# Run on the node that kind-config.yaml labelled ingress-ready=true (the single control-plane node).
+nodeSelector:
+  ingress-ready: "true"
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Equal
+    effect: NoSchedule
+  - key: node-role.kubernetes.io/master
+    operator: Equal
+    effect: NoSchedule
+
+# Both providers are on by default in the chart; spelled out here so the lesson is explicit.
+providers:
+  kubernetesIngress:
+    enabled: true
+  kubernetesCRD:
+    enabled: true
+
+ingressClass:
+  enabled: true
+  isDefaultClass: true
+
+# Dashboard: reachable at http://dashboard.localhost:8080/dashboard/ (LEARNING ONLY: no authentication).
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: Host(`dashboard.localhost`)
+    entryPoints: ["web"]
+
+logs:
+  general:
+    level: INFO
+  access:
+    enabled: true
+
+# Prometheus metrics are on the "metrics" entrypoint by default (used by Flagger in Day 22).
+metrics:
+  prometheus:
+    entryPoint: metrics

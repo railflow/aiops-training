@@ -1,0 +1,22 @@
+# Deliberate mistake for the lab: hello.py exits after one line, so a Deployment
+# (which wants a process that never ends) restarts it forever: CrashLoopBackOff.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-oneshot
+  labels:
+    app: hello-oneshot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-oneshot
+  template:
+    metadata:
+      labels:
+        app: hello-oneshot
+    spec:
+      containers:
+        - name: hello
+          image: hello-py:1.0
+          imagePullPolicy: IfNotPresent

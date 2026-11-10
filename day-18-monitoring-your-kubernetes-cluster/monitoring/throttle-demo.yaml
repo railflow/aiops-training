@@ -1,0 +1,42 @@
+# CPU throttling demo: a deliberately small CPU LIMIT. /burn?ms=200 needs far more CPU than 100m allows,
+# so the kernel pauses the container (CFS throttling) and latency rises while CPU use looks "capped".
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: shop-throttle, namespace: apps, labels: {app: shop-throttle}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: shop-throttle}}
+  template:
+    metadata: {labels: {app: shop-throttle}}
+    spec:
+      containers:
+        - name: shop
+          image: shop-observability:1.0
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: OTEL_SERVICE_NAME, value: shop-throttle}
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 5}
+          resources:
+            requests: {cpu: 50m, memory: 96Mi}
+            limits: {cpu: 100m, memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: shop-throttle, namespace: apps}
+spec:
+  selector: {app: shop-throttle}
+  ports: [{name: http, port: 80, targetPort: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: shop-throttle, namespace: apps}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: throttle.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: shop-throttle, port: {number: 80}}}

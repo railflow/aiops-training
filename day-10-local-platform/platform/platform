@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# The platform's front door: one command for the common chores.  ./platform --help
+# Run it from Git Bash or WSL on Windows. It needs: bash, sed, and (for db/bucket/inventory) kubectl.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMPLATE="$HERE/app-template"
+SHARED="$HERE/shared-services"
+
+usage() {
+  cat <<'USAGE'
+platform: the paved road for hosting an app
+
+Usage:
+  platform new <name> [--dir DIR] [--db] [--bucket]   Create a new app from the golden-path template
+  platform db <name> [--dry-run]                      Provision a database and Secret in the shared Postgres
+  platform bucket <name> [--dry-run]                  Provision a bucket and Secret in the shared object store
+  platform inventory                                  List databases, buckets and queues the cluster runs
+  platform request <kind|kinds|status|approve|complete> ...  Ask for infrastructure through the message bus (Day 33 lab 3)
+  platform --help                                     Show this help
+
+Rules for <name>: lowercase letters, digits and dashes; starts with a letter; 2 to 31 characters.
+
+Examples:
+  platform new orders-api --dir ~/heyjob-labs/apps --db
+  platform db orders-api --dry-run
+USAGE
+}
+
+valid_name() { [[ "${1:-}" =~ ^[a-z][a-z0-9-]{1,30}$ ]]; }
+
+cmd_new() {
+  local name="${1:-}"; shift || true
+  valid_name "$name" || { echo "error: invalid app name '${name}'. See: platform --help" >&2; exit 2; }
+  local dir="." want_db=0 want_bucket=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --dir) dir="${2:?--dir needs a value}"; shift 2 ;;
+      --db) want_db=1; shift ;;
+      --bucket) want_bucket=1; shift ;;
+      *) echo "error: unknown option '$1'" >&2; exit 2 ;;
+    esac
+  done
+  local dest="$dir/$name"
+  [ ! -e "$dest" ] || { echo "error: $dest already exists; refusing to overwrite" >&2; exit 1; }
+  mkdir -p "$dest"
+  cp -R "$TEMPLATE/." "$dest/"
+  # Replace the placeholder in every text file of the new app.
+  find "$dest" -type f \( -name '*.md' -o -name '*.py' -o -name '*.yaml' -o -name '*.yml' -o -name '*.json' -o -name 'Dockerfile' \) -print0 |
+    while IFS= read -r -d '' f; do sed -i.bak "s/__APP__/${name}/g" "$f" && rm -f "$f.bak"; done
+  if [ "$want_db" = 1 ] || [ "$want_bucket" = 1 ]; then
+    awk '{print} /platform\/owner/ {print "    platform/uses-data: \"true\""}' "$dest/k8s/namespace.yaml" > "$dest/k8s/namespace.yaml.new" &&
+      mv "$dest/k8s/namespace.yaml.new" "$dest/k8s/namespace.yaml"
+  fi
+  echo "created $dest"
+  echo "next: cd $dest && pytest -q"
+  if [ "$want_db" = 1 ]; then echo "next: platform db $name"; fi
+  if [ "$want_bucket" = 1 ]; then echo "next: platform bucket $name"; fi
+}
+
+cmd_db() { valid_name "${1:-}" || { echo "error: invalid app name. See: platform --help" >&2; exit 2; }; exec "$SHARED/bin/provision-db.sh" "$@"; }
+cmd_bucket() { valid_name "${1:-}" || { echo "error: invalid app name. See: platform --help" >&2; exit 2; }; exec "$SHARED/bin/provision-bucket.sh" "$@"; }
+cmd_inventory() { exec "$HERE/inventory.sh"; }
+cmd_request() { exec python3 "$HERE/../../day-33-message-queues-in-devex/mq-devex/lib/platform_request.py" "$@"; }
+
+case "${1:-}" in
+  new) shift; cmd_new "$@" ;;
+  db) shift; cmd_db "$@" ;;
+  bucket) shift; cmd_bucket "$@" ;;
+  inventory) shift; cmd_inventory ;;
+  request) shift; cmd_request "$@" ;;
+  -h|--help|help|"") usage ;;
+  *) echo "error: unknown command '$1'" >&2; usage >&2; exit 2 ;;
+esac

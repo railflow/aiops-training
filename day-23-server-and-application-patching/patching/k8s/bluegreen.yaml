@@ -1,0 +1,38 @@
+# Blue/green by hand: two full Deployments, one Service whose selector decides who gets traffic.
+# Switch with:  kubectl -n patch-demo patch svc patch-demo-bg -p '{"spec":{"selector":{"app":"patch-demo-bg","color":"green"}}}'
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: patch-demo-blue, namespace: patch-demo}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: patch-demo-bg, color: blue}}
+  template:
+    metadata: {labels: {app: patch-demo-bg, color: blue}}
+    spec:
+      containers:
+        - name: app
+          image: localhost:30500/patch-demo:1.0.0
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: patch-demo-green, namespace: patch-demo}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: patch-demo-bg, color: green}}
+  template:
+    metadata: {labels: {app: patch-demo-bg, color: green}}
+    spec:
+      containers:
+        - name: app
+          image: localhost:30500/patch-demo:1.0.1
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: patch-demo-bg, namespace: patch-demo}
+spec:
+  selector: {app: patch-demo-bg, color: blue}
+  ports: [{port: 80, targetPort: 8080}]

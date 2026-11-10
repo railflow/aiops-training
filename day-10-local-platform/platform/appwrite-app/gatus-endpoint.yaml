@@ -1,0 +1,30 @@
+# Add under `endpoints:` in the Gatus config (group "platform"). Gatus runs in the cluster, so it calls Traefik's Service
+# and sets the Host header; `[BODY].x` needs a JSON response.
+- name: appwrite-api
+  group: platform
+  url: http://traefik.traefik/v1/health/version
+  headers:
+    Host: appwrite.localhost
+  interval: 60s
+  conditions:
+    - "[STATUS] == 200"
+    - "[BODY].version == pat(*)"
+  alerts:
+    - type: custom
+# A synthetic check THROUGH the function: executes it the way a client would.
+# Replace PROJECT_ID. The function must allow execution by "any" (see appwrite.config.json).
+- name: guestbook-function
+  group: apps
+  url: http://traefik.traefik/v1/functions/guestbook/executions
+  method: POST
+  headers:
+    Host: appwrite.localhost
+    Content-Type: application/json
+    X-Appwrite-Project: PROJECT_ID
+  body: '{"path": "/healthz", "method": "GET", "async": false}'
+  interval: 60s
+  conditions:
+    - "[STATUS] == 201"
+    - "[BODY].responseStatusCode == 200"
+  alerts:
+    - type: custom

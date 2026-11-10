@@ -1,0 +1,34 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "billing",
+      "version": "1.0.0"
+    },
+    "properties": [
+      {
+        "name": "note",
+        "value": "SYNTHETIC sample for the course, not generated from a real build"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "commons-lang3",
+      "group": "org.apache.commons",
+      "version": "3.12.0",
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.12.0"
+    },
+    {
+      "type": "library",
+      "name": "log4j-core",
+      "group": "org.apache.logging.log4j",
+      "version": "2.17.1",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.17.1"
+    }
+  ]
+}

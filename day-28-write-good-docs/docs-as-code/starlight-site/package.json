@@ -1,0 +1,23 @@
+{
+  "name": "docs-as-code-example",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.42.9",
+    "astro": "^7.3.6",
+    "astro-mermaid": "2.2.0",
+    "mermaid": "12.3.0",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "starlight-links-validator": "^0.27.0"
+  }
+}

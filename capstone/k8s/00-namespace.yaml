@@ -1,0 +1,8 @@
+# Everything the capstone runs lives in ONE namespace, so one `kubectl delete ns capstone` is a complete kill switch and a complete cleanup.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: capstone
+  labels:
+    pod-security.kubernetes.io/enforce: restricted      # non-root, no privilege escalation, seccomp, dropped capabilities
+    pod-security.kubernetes.io/enforce-version: latest

@@ -1,0 +1,999 @@
+#!/usr/bin/env bash
+# Local kind cluster for this repo.
+# Cluster name: ai-ops-training
+# kubectl context: kind-ai-ops-training
+#
+# ./tools/kind is a thin wrapper around the kind and kubectl CLIs. It only starts,
+# stops, lists, and deletes this cluster (and a busybox workload on start).
+# kind and kubectl have far more capabilities; use those CLIs directly to learn them.
+#
+#   ./tools/kind start      start Docker if it is stopped, create the cluster if needed, start its node containers, run busybox
+#   ./tools/kind stop       docker stop the node containers; the cluster is kept
+#   ./tools/kind destroy    kind delete cluster --name ai-ops-training
+#   ./tools/kind list       kind get clusters
+#   ./tools/kind --help     this usage (also -h, help, or no args)
+#
+# Use another name with KIND_CLUSTER_NAME=name (default ai-ops-training). The default used to be heyjob-local:
+# if that cluster still exists, start prints the command to delete it and leaves it alone.
+#
+# start brings a stopped cluster back with docker start on the same node containers.
+# Safe to repeat: an existing cluster is reused, and stop/destroy are no-ops if it is already gone.
+#
+# This script will not install anything. Docker, kind, and kubectl must already be installed.
+# The one thing it will do for you: `./tools/kind start` starts the Docker daemon when Docker is installed
+# but stopped (Docker Desktop on macOS, the systemd unit on Linux when sudo needs no password).
+# stop, destroy, and list never start Docker; they just report that it is not running.
+# Opt out with KIND_NO_AUTOSTART=1 or ./tools/kind start --no-autostart. Wait time: KIND_DOCKER_WAIT (default 120s).
+# Ports: start generates .logs/kind-config.yaml with extraPortMappings (ingress http/https and the course NodePorts) on free
+# host ports, chosen when the cluster is created. Resuming reads them back with docker port. KIND_HTTP_PORT and
+# KIND_HTTPS_PORT ask for exact ports. Everything chosen is written to .logs/ports.env.
+# start ends with a short "Where things are" block (cluster, kubectl API address, ingress ports, log commands).
+# Hide it with KIND_NO_SUMMARY=1.
+# start prints checks 1-3 before creating the cluster and check 4 after busybox is running.
+# stop, destroy, and list print only the checks for the tools they use.
+#
+# Output styling
+#   Colors: on when the stream is a TTY, off when piped or when NO_COLOR is set.
+#           KIND_COLOR=always|never|auto overrides that (always beats NO_COLOR).
+#   Emojis: on by default, KIND_NO_EMOJI=1 turns them off.
+set -euo pipefail
+
+CLUSTER_NAME="${KIND_CLUSTER_NAME:-ai-ops-training}"
+LEGACY_CLUSTER_NAME="heyjob-local"
+if [[ ! "$CLUSTER_NAME" =~ ^[a-z0-9][a-z0-9.-]*$ ]]; then
+  echo "KIND_CLUSTER_NAME must be lowercase letters, digits, '-' or '.' (got: ${CLUSTER_NAME})" >&2
+  exit 2
+fi
+WORKLOAD_NAME="busybox"
+READY_TIMEOUT="180s"
+CONTEXT="kind-${CLUSTER_NAME}"
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+DOCS_ROOT="${KIND_DOCS_ROOT:-$(dirname "$(dirname "$SELF")")}"
+LOGS_DIR="${DOCS_ROOT}/.logs"
+# Host ports for the cluster (ingress and NodePorts). Chosen when the cluster is created, read back when it is resumed.
+#   KIND_HTTP_PORT / KIND_HTTPS_PORT   ask for exact host ports (an error if busy); default: 8080 / 8443, next free if busy
+HTTP_DEFAULT=8080
+HTTPS_DEFAULT=8443
+NODE_PORTS="30090 30500 30300 30081"
+HTTP_PORT="" HTTPS_PORT="" PORTS_FIXED=0
+SHARED_DIR="${SHARED_DIR:-$HOME/kind-shared}"
+PORTS_ROOT="$DOCS_ROOT"
+PORTS_LOGS="$LOGS_DIR"
+PORTS_ENV_FILE="$LOGS_DIR/ports.env"
+if [[ -r "$(dirname "$SELF")/ports.sh" ]]; then
+  # shellcheck source=ports.sh
+  . "$(dirname "$SELF")/ports.sh"
+else
+  echo "kind: ports.sh is missing next to tools/kind. Run it from a full clone of the repo." >&2
+  exit 1
+fi
+SHOW_SUMMARY=1
+[[ "${KIND_NO_SUMMARY:-}" == "1" ]] && SHOW_SUMMARY=0
+
+# Docker daemon autostart (only `start` may do it; see check_docker).
+#   KIND_NO_AUTOSTART=1 or --no-autostart   never start anything, just explain
+#   KIND_DOCKER_WAIT=SECONDS                how long to wait for the daemon (default 120)
+# The next three exist so the logic can be tested with fakes; you do not need to set them.
+#   KIND_DOCKER_POLL (seconds between checks, default 2), KIND_APP_DIRS (where macOS apps live),
+#   KIND_SYSTEMD_DIR (default /run/systemd/system), KIND_PROC_VERSION (default /proc/version), KIND_EUID.
+AUTOSTART_ALLOWED=1
+[[ "${KIND_NO_AUTOSTART:-}" == "1" ]] && AUTOSTART_ALLOWED=0
+DOCKER_WAIT="${KIND_DOCKER_WAIT:-120}"
+DOCKER_POLL="${KIND_DOCKER_POLL:-2}"
+
+# ---------------------------------------------------------------------------
+# Styling
+# ---------------------------------------------------------------------------
+
+# color_enabled FD: should ANSI colors be used for this stream (1 = stdout, 2 = stderr)?
+color_enabled() {
+  case "${KIND_COLOR:-auto}" in
+    always) return 0 ;;
+    never) return 1 ;;
+  esac
+  [[ -z "${NO_COLOR:-}" ]] || return 1
+  [[ -t "$1" ]]
+}
+
+# setup_style FD: set the ANSI variables for the given stream.
+# Real ESC bytes are stored (via $'...'), so they work with printf %s and echo alike.
+setup_style() {
+  if color_enabled "$1"; then
+    RST=$'\033[0m'
+    BOLD=$'\033[1m'
+    DIM=$'\033[2m'
+    RED=$'\033[31m'
+    GREEN=$'\033[32m'
+    YELLOW=$'\033[33m'
+    BLUE=$'\033[34m'
+    MAGENTA=$'\033[35m'
+    CYAN=$'\033[36m'
+  else
+    RST="" BOLD="" DIM="" RED="" GREEN="" YELLOW="" BLUE="" MAGENTA="" CYAN=""
+  fi
+}
+
+# Emojis carry a trailing space so they vanish cleanly with KIND_NO_EMOJI=1.
+if [[ "${KIND_NO_EMOJI:-}" == "1" ]]; then
+  E_DOCKER="" E_KUBECTL="" E_KIND="" E_TEST="" E_YES="" E_NO="" E_WAIT="" E_DONE=""
+  E_BROOM="" E_STOP="" E_LIST="" E_TIP="" E_WARN="" E_SEARCH="" E_INFO="" E_HELP=""
+  E_START="" E_DESTROY="" E_PIN="" E_OK="" E_GLOBE="" E_PLUG="" E_LOGS="" E_BOOK="" E_NOTE="" E_DOOR=""
+  M_INSPECT="▶ "
+else
+  E_DOCKER="🐳 " E_KUBECTL="☸️  " E_KIND="📦 " E_TEST="🧪 " E_YES="✅ " E_NO="❌ " E_WAIT="⏳ "
+  E_DONE="🎉 " E_BROOM="🧹 " E_STOP="🛑 " E_LIST="📋 " E_TIP="💡 " E_WARN="⚠️  "
+  E_SEARCH="🔍 " E_INFO="ℹ️  " E_HELP="❓ " E_START="🚀 " E_DESTROY="💥 " E_PIN="👉 "
+  E_OK="✅ "
+  E_GLOBE="🌐 " E_PLUG="🔌 " E_LOGS="📜 " E_BOOK="📚 " E_NOTE="🧾 " E_DOOR="🚪 "
+  M_INSPECT="🔍 "
+fi
+
+setup_style 2
+ERR_RST="$RST" ERR_BOLD="$BOLD" ERR_RED="$RED" ERR_CYAN="$CYAN"
+setup_style 1
+
+RULE_WIDTH=66
+
+# repeat CHAR COUNT: print CHAR COUNT times (no newline).
+repeat() {
+  local out="" i
+  for ((i = 0; i < $2; i++)); do out+="$1"; done
+  printf '%s' "$out"
+}
+
+# box TITLE [LINE...]: heavy box (left bar only, emoji-width safe).
+box() {
+  local title="$1"
+  shift
+  printf '\n%s┏%s%s\n' "$BOLD$MAGENTA" "$(repeat ━ "$RULE_WIDTH")" "$RST"
+  printf '%s┃%s  %s%s%s\n' "$BOLD$MAGENTA" "$RST" "$BOLD$MAGENTA" "$title" "$RST"
+  local line
+  for line in "$@"; do
+    printf '%s┃%s  %s%s%s\n' "$BOLD$MAGENTA" "$RST" "$DIM" "$line" "$RST"
+  done
+  printf '%s┗%s%s\n' "$BOLD$MAGENTA" "$(repeat ━ "$RULE_WIDTH")" "$RST"
+}
+
+# section COLOR EMOJI TITLE: bold colored header with a thin rule underneath.
+section() {
+  printf '\n%s%s%s%s\n' "$BOLD$1" "$2" "$3" "$RST"
+  printf '%s%s%s\n' "$DIM$1" "$(repeat ─ "$RULE_WIDTH")" "$RST"
+}
+
+say_info() { printf '%s%s%s%s\n' "$CYAN" "$E_INFO" "$*" "$RST"; }
+say_wait() { printf '%s%s%s%s\n' "$YELLOW" "$E_WAIT" "$*" "$RST"; }
+say_warn() { printf '%s%s%s%s\n' "$BOLD$YELLOW" "$E_WARN" "$*" "$RST"; }
+say_fail() { printf '%s%s%s%s\n' "$BOLD$RED" "$E_NO" "$*" "$RST"; }
+say_done() { printf '%s%s%s%s\n' "$BOLD$GREEN" "$E_DONE" "$*" "$RST"; }
+say_dim() { printf '%s%s%s\n' "$DIM" "$*" "$RST"; }
+
+ports_note() { say_dim "  $*"; }
+ports_fail() { say_fail "$*"; }
+
+# tip TEXT: a how-to / fix line.
+tip() { printf '%s%s%s%s\n' "$YELLOW" "$E_TIP" "$*" "$RST"; }
+
+# fixcmd COMMAND...: an indented command the user can copy.
+fixcmd() { printf '     %s$%s %s%s%s\n' "$BOLD$CYAN" "$RST" "$CYAN" "$*" "$RST"; }
+
+# cmdline COMMAND...: show a command in the cyan "▶" style on stdout.
+cmdline() { printf '  %s▶%s %s%s%s\n' "$BOLD$CYAN" "$RST" "$CYAN" "$*" "$RST"; }
+
+die() {
+  printf '%s%s%s%s\n' "$ERR_BOLD$ERR_RED" "$E_NO" "kind: $*" "$ERR_RST" >&2
+  exit 1
+}
+
+# Print the exact CLI invocation. The trace goes to stderr so it stays
+# visible when stdout is captured, and so it is not swallowed by $(...).
+trace() {
+  local quoted
+  quoted="$(printf ' %q' "$@")"
+  quoted="${quoted# }"
+  printf '  %s▶%s %s%s%s\n' "$ERR_BOLD$ERR_CYAN" "$ERR_RST" "$ERR_CYAN" "$quoted" "$ERR_RST" >&2
+}
+
+run_kind() {
+  trace kind "$@"
+  "$KIND_BIN" "$@"
+}
+
+run_kubectl() {
+  trace kubectl "$@"
+  "$KUBECTL_BIN" "$@"
+}
+
+run_docker() {
+  trace docker "$@"
+  "$DOCKER_BIN" "$@"
+}
+
+# ---------------------------------------------------------------------------
+# Help
+# ---------------------------------------------------------------------------
+
+# Aligned rows. Emojis are printed outside the padded field so columns stay straight.
+# cmd_row EMOJI NAME DESC
+cmd_row() { printf '  %s%s%s%-9s%s %s\n' "$1" "$BOLD" "$GREEN" "$2" "$RST" "$3"; }
+
+# chk_row EMOJI LABEL DESC
+chk_row() { printf '  %s%s%s%-8s%s %s\n' "$1" "$BOLD" "$CYAN" "$2" "$RST" "$3"; }
+
+# kv_row LABEL TEXT (no emoji; indented to line up with the emoji rows)
+kv_row() { printf '     %s%-9s%s %s\n' "$BOLD" "$1" "$RST" "$2"; }
+
+# h_cmd LABEL COMMAND: underlying CLI command, cyan with a ▶ prefix.
+h_cmd() { printf '    %s%-8s%s %s▶%s %s%s%s\n' "$DIM" "$1" "$RST" "$BOLD$CYAN" "$RST" "$CYAN" "$2" "$RST"; }
+
+# h_inspect LABEL COMMAND: docker inspect command, yellow with a 🔍 marker.
+h_inspect() { printf '    %s%-8s%s %s%s%s%s\n' "$DIM" "$1" "$RST" "$YELLOW" "$M_INSPECT" "$2" "$RST"; }
+
+# h_note TEXT: dim explanatory line.
+h_note() { printf '    %s%s%s\n' "$DIM" "$1" "$RST"; }
+
+usage() {
+  box "${E_KUBECTL}./tools/kind  —  kind + kubectl made easy  ${E_DOCKER}" \
+    "Local ${CLUSTER_NAME} cluster  ·  kubectl context ${CONTEXT}" \
+    "A thin wrapper. It installs nothing."
+
+  if [[ -t 1 && -z "${RST}" && -n "${NO_COLOR:-}" && "${KIND_COLOR:-auto}" == "auto" ]]; then
+    echo
+    echo "${E_TIP}Colors are off because NO_COLOR is set. Try:  KIND_COLOR=always ./tools/kind --help"
+  fi
+
+  section "$CYAN" "${E_INFO}" "About"
+  echo "  ./tools/kind is a thin wrapper around the kind and kubectl CLIs."
+  echo "  It only exposes a few basic functions. kind and kubectl have far more"
+  echo "  capabilities. Use those CLIs directly to learn how they work:"
+  echo
+  cmdline "kind --help"
+  cmdline "kubectl --help"
+  echo
+  say_warn "This script will not install anything. Install Docker, kind, and kubectl yourself."
+
+  section "$BLUE" "${E_HELP}" "Usage"
+  printf '  %s%s./tools/kind%s %s<command>%s\n\n' "$BOLD" "$GREEN" "$RST" "$BOLD" "$RST"
+  cmd_row "${E_START}" "start" "start Docker if stopped, create the cluster if needed, start its nodes, run busybox"
+  cmd_row "${E_STOP}" "stop" "stop the node containers; the cluster is kept"
+  cmd_row "${E_DESTROY}" "destroy" "delete the cluster"
+  cmd_row "${E_LIST}" "list" "list all kind clusters"
+  cmd_row "${E_HELP}" "help" "show this usage (also -h, --help, or no args)"
+
+  section "$GREEN" "${E_OK}" "Preflight  (each check prints yes or no; the first no stops the command, exit non-zero)"
+  chk_row "${E_DOCKER}" "check 1" "is docker installed and running   (docker info; start may start it, see below)"
+  chk_row "${E_KUBECTL}" "check 2" "is kubectl installed             (command -v kubectl)"
+  chk_row "${E_KIND}" "check 3" "is kind installed                (command -v kind, then kind version)"
+  chk_row "${E_TEST}" "check 4" "test deploy: deploy busybox"
+  printf '     %s%s%s\n' "$DIM" "start only, after the cluster is up and busybox is deployed and running." "$RST"
+  printf '     %s%s%s\n' "$DIM" "Prints the kubectl command used." "$RST"
+  echo
+  kv_row "start" "runs checks 1, 2, 3, then 4"
+  kv_row "stop" "runs check 1 (docker) and check 3 (kind); never starts Docker"
+  kv_row "destroy" "runs check 1 (docker) and check 3 (kind); never starts Docker"
+  kv_row "list" "runs check 1 (docker) and check 3 (kind); never starts Docker"
+
+  section "$GREEN" "${E_DOCKER}" "Docker autostart  (start only; nothing is ever installed)"
+  echo "  If docker is installed but the daemon is stopped, ./tools/kind start tries to start it:"
+  h_note "macOS:   open -a Docker, then waits up to KIND_DOCKER_WAIT seconds (default 120), polling docker info."
+  h_note "         Only Docker Desktop is started. With only Colima, OrbStack or Rancher Desktop it prints the"
+  h_note "         command to start them and stops. No Docker Desktop app: it shows brew install --cask docker-desktop."
+  h_note "Linux:   sudo systemctl start docker, only if you are root or sudo needs no password; else it prints the hint."
+  h_note "WSL2:    never starts anything; start Docker Desktop on Windows and enable WSL integration."
+  h_note "Opt out: KIND_NO_AUTOSTART=1 ./tools/kind start   or   ./tools/kind start --no-autostart   (explain only, as before)"
+  h_note "stop, destroy and list never start Docker; they report that it is not running."
+
+  section "$GREEN" "${E_START}" "start"
+  echo "  Create the ${CLUSTER_NAME} cluster if needed, start its nodes, and run busybox."
+  echo
+  h_note "When the cluster does not exist yet:"
+  h_cmd "runs" "kind create cluster --name ${CLUSTER_NAME} --wait ${READY_TIMEOUT}"
+  h_note "When the cluster exists (including after stop):"
+  h_cmd "runs" "kind get nodes --name ${CLUSTER_NAME}"
+  h_cmd "" "docker start <node>"
+  h_note "Then:"
+  h_cmd "runs" "kind export kubeconfig --name ${CLUSTER_NAME}"
+  h_cmd "" "kubectl --context ${CONTEXT} wait --for=condition=Ready nodes --all --timeout=${READY_TIMEOUT}"
+  h_cmd "" "kubectl --context ${CONTEXT} apply -f -"
+  h_note "          stdin is a busybox Deployment (image busybox, command sleep infinity)"
+  h_cmd "" "kubectl --context ${CONTEXT} rollout status deployment/${WORKLOAD_NAME} --timeout=${READY_TIMEOUT}"
+  h_cmd "" "kubectl --context ${CONTEXT} wait --for=condition=Ready pod -l app=${WORKLOAD_NAME} --timeout=${READY_TIMEOUT}"
+  h_cmd "" "kubectl config use-context ${CONTEXT}"
+  h_note "See the node containers:"
+  h_inspect "inspect" "docker ps"
+  h_inspect "" "docker ps --filter name=${CLUSTER_NAME}"
+
+  section "$YELLOW" "${E_STOP}" "stop"
+  echo "  Stop the ${CLUSTER_NAME} node containers without deleting the cluster."
+  echo
+  h_note "Underlying commands:"
+  h_cmd "runs" "kind get nodes --name ${CLUSTER_NAME}"
+  h_cmd "" "docker stop <node>"
+  h_note "See them stopped:"
+  h_inspect "inspect" "docker ps -a --filter name=${CLUSTER_NAME}"
+
+  section "$RED" "${E_DESTROY}" "destroy"
+  echo "  Delete the ${CLUSTER_NAME} cluster."
+  echo
+  h_note "Underlying commands:"
+  h_cmd "runs" "kind delete cluster --name ${CLUSTER_NAME}"
+  h_note "Confirm it is gone:"
+  h_inspect "inspect" "docker ps -a"
+  h_cmd "" "kind get clusters"
+
+  section "$BLUE" "${E_LIST}" "list"
+  echo "  List all kind clusters. Prints \"No kind clusters.\" when there are none."
+  echo
+  h_note "Underlying commands:"
+  h_cmd "runs" "kind get clusters"
+
+  section "$MAGENTA" "${E_HELP}" "help"
+  echo "  Show this usage."
+
+  section "$YELLOW" "${E_TIP}" "Tips"
+  kv_row "colors" "on in a terminal; NO_COLOR=1 turns them off, KIND_COLOR=always forces them"
+  kv_row "emojis" "KIND_NO_EMOJI=1 turns them off"
+  kv_row "cluster" "KIND_CLUSTER_NAME=name uses a different cluster name (default ai-ops-training); the context becomes kind-<name>"
+  kv_row "old name" "an older heyjob-local cluster is left alone; start prints how to delete it (kind delete cluster --name heyjob-local)"
+  kv_row "summary" "start ends with a Where things are block: cluster, API address, ingress ports, log commands; KIND_NO_SUMMARY=1 hides it"
+  kv_row "ports" "start picks free host ports at create time (http 8080, https 8443, NodePorts 30090 30500 30300 30081; next free if busy)"
+  kv_row "" "KIND_HTTP_PORT=9090 KIND_HTTPS_PORT=9443 asks for exact ports (error if busy); fixed until ./tools/kind destroy; saved in .logs/ports.env"
+  kv_row "docker" "KIND_NO_AUTOSTART=1 (or --no-autostart) stops start from launching Docker; KIND_DOCKER_WAIT=300 waits longer"
+  kv_row "safe" "start is safe to repeat; stop and destroy are no-ops when the cluster is gone"
+  echo
+}
+
+# usage_err: print usage to stderr with stderr-appropriate styling.
+usage_err() {
+  setup_style 2
+  usage >&2
+  setup_style 1
+}
+
+# This file is named kind. Skip it when searching PATH so we call the real binary.
+# Same lookup as command -v, ignoring this wrapper.
+resolve_tool() {
+  local name="$1"
+  local dir candidate resolved
+  local IFS=:
+  for dir in $PATH; do
+    [[ -n "$dir" ]] || dir="."
+    candidate="${dir%/}/${name}"
+    if [[ ! -x "$candidate" || -d "$candidate" ]]; then
+      continue
+    fi
+    resolved="$(readlink -f "$candidate" 2>/dev/null || printf '%s' "$candidate")"
+    if [[ "$resolved" == "$SELF" ]]; then
+      continue
+    fi
+    printf '%s\n' "$candidate"
+    return 0
+  done
+  return 1
+}
+
+# check_result EMOJI LABEL yes|no
+check_result() {
+  local mark word
+  if [[ "$3" == "yes" ]]; then
+    mark="$GREEN$E_YES"
+    word="${BOLD}${GREEN}yes"
+  else
+    mark="$RED$E_NO"
+    word="${BOLD}${RED}no"
+  fi
+  printf '%s%s%s%s : %s%s%s\n' "$1" "$BOLD" "$2" "$RST" "$mark" "$word" "$RST"
+}
+
+found_path() { printf '  %s→ %s%s\n' "$DIM" "$1" "$RST"; }
+
+# Where the platform's Docker comes from decides what we can say (and do).
+is_wsl() {
+  grep -qi microsoft "${KIND_PROC_VERSION:-/proc/version}" 2>/dev/null
+}
+
+# os_kind: darwin | wsl | linux | other
+os_kind() {
+  case "$(uname -s)" in
+    Darwin) echo darwin ;;
+    Linux) if is_wsl; then echo wsl; else echo linux; fi ;;
+    *) echo other ;;
+  esac
+}
+
+# mac_app_present NAME: is NAME.app in one of the usual application folders?
+mac_app_present() {
+  local dir IFS=:
+  for dir in ${KIND_APP_DIRS:-/Applications:$HOME/Applications}; do
+    [[ -d "${dir}/$1.app" ]] && return 0
+  done
+  return 1
+}
+
+# wait_for_docker: poll `docker info` for up to DOCKER_WAIT seconds, with a progress line.
+# On a terminal the line is rewritten in place; otherwise a line is printed every 10 seconds.
+wait_for_docker() {
+  local start="$SECONDS" elapsed=0 dots="" last_print=-10 tty=0
+  [[ -t 1 ]] && tty=1
+  say_wait "Waiting for the Docker daemon (up to ${DOCKER_WAIT}s; set KIND_DOCKER_WAIT to change)..."
+  cmdline "docker info   (polled every ${DOCKER_POLL}s)"
+  while true; do
+    if "$DOCKER_BIN" info >/dev/null 2>&1; then
+      ((tty)) && printf '\r\033[K'
+      return 0
+    fi
+    elapsed=$((SECONDS - start))
+    if ((elapsed >= DOCKER_WAIT)); then
+      ((tty)) && printf '\r\033[K'
+      return 1
+    fi
+    dots+="·"
+    if ((tty)); then
+      printf '\r%s%s%s%s %s(%ss / %ss)%s' "$YELLOW" "$E_WAIT" "$E_DOCKER" "$dots" "$DIM" "$elapsed" "$DOCKER_WAIT" "$RST"
+    elif ((elapsed - last_print >= 10)); then
+      printf '%s%s%s%s %s(%ss / %ss)%s\n' "$YELLOW" "$E_WAIT" "$E_DOCKER" "$dots" "$DIM" "$elapsed" "$DOCKER_WAIT" "$RST"
+      last_print=$elapsed
+    fi
+    sleep "$DOCKER_POLL"
+  done
+}
+
+docker_giveup() {
+  say_warn "This script will not install anything."
+  exit 1
+}
+
+# docker_manual_hints KIND: how to start Docker yourself on this platform. KIND is
+# "autostart-off" (opted out), "report" (stop/destroy/list never start it), or "failed" (we tried).
+docker_manual_hints() {
+  case "$(os_kind)" in
+    darwin)
+      tip "Start Docker Desktop (the whale in the menu bar should settle), or run:"
+      fixcmd "open -a Docker"
+      tip "Using Colima, OrbStack or Rancher Desktop instead? Start that runtime yourself (for example: colima start), then check with: docker info"
+      ;;
+    wsl)
+      tip "This is WSL2: start Docker Desktop on Windows, and turn on Settings > Resources > WSL integration for this distro."
+      tip "Then check from this shell with: docker info"
+      ;;
+    linux)
+      tip "Start the daemon:"
+      fixcmd "sudo systemctl start docker"
+      tip "If it is running and you still get a permission error, add your user to the docker group and open a new shell:"
+      fixcmd 'sudo usermod -aG docker "$USER"'
+      ;;
+    *)
+      tip "Start your Docker daemon, then check with: docker info"
+      ;;
+  esac
+  case "$(os_kind):$1" in
+    darwin:autostart-off | linux:autostart-off)
+      say_dim "Autostart is off (KIND_NO_AUTOSTART=1 or --no-autostart). Without that, ./tools/kind start would try to start Docker for you." ;;
+    wsl:autostart-off | other:autostart-off)
+      say_dim "Autostart is off (KIND_NO_AUTOSTART=1 or --no-autostart)." ;;
+    darwin:report | linux:report)
+      say_dim "This command never starts Docker. ./tools/kind start does (unless you opt out); run it, or start Docker yourself." ;;
+    *:report)
+      say_dim "This command never starts Docker. Start it yourself, then run this again." ;;
+  esac
+}
+
+docker_timeout_help() {
+  say_fail "Docker did not answer within ${DOCKER_WAIT}s."
+  case "$(os_kind)" in
+    darwin)
+      tip "Check these, then run ./tools/kind start again:"
+      say_dim "  - the whale icon in the menu bar: is it still animating, or showing an error?"
+      say_dim "  - a first-run window waiting for you: licence acceptance, sign-in prompt, or a privileged-helper password request"
+      say_dim "  - Apple silicon: Rosetta installed if Docker asks for it; and System Settings > Privacy & Security for any blocked Docker item"
+      say_dim "  - slower machine? give it longer: KIND_DOCKER_WAIT=300 ./tools/kind start"
+      say_dim "  - using Colima, OrbStack or Rancher Desktop? Start that runtime instead (Docker Desktop is not required)"
+      ;;
+    linux)
+      tip "Look at why the daemon is not coming up:"
+      fixcmd "systemctl status docker"
+      fixcmd "journalctl -u docker --no-pager -n 30"
+      ;;
+  esac
+}
+
+# docker_autostart: try to start the daemon (macOS, Linux) and wait for it. Returns 0 only when docker answers.
+# Never installs anything. Prints and exits on its own for the cases it cannot handle.
+docker_autostart() {
+  case "$(os_kind)" in
+    darwin)
+      if ! mac_app_present Docker; then
+        if command -v colima >/dev/null 2>&1; then
+          say_warn "Docker Desktop is not installed here, but colima is. Not starting it for you (it may not be the runtime you want)."
+          tip "If it is, start it yourself and re-run:"
+          fixcmd "colima start"
+          docker_giveup
+        elif mac_app_present OrbStack; then
+          say_warn "Docker Desktop is not installed here, but OrbStack is. Not starting it for you."
+          tip "If you use it, start it yourself and re-run:"
+          fixcmd "open -a OrbStack"
+          docker_giveup
+        elif mac_app_present "Rancher Desktop"; then
+          say_warn "Docker Desktop is not installed here, but Rancher Desktop is. Not starting it for you."
+          tip "Start Rancher Desktop (with the dockerd/moby engine) yourself and re-run."
+          docker_giveup
+        fi
+      fi
+      say_info "Docker is installed but the daemon is not running. Starting Docker Desktop (opt out: KIND_NO_AUTOSTART=1)."
+      cmdline "open -a Docker"
+      if ! open -a Docker; then
+        check_result "$E_DOCKER" "check 1: is docker installed and running" no
+        say_fail "Could not open the Docker app: only the docker command line is installed, not Docker Desktop."
+        tip "Install Docker Desktop yourself (this script will not):"
+        fixcmd "brew install --cask docker-desktop"
+        tip "Or use another runtime that provides a docker daemon (Colima, OrbStack, Rancher Desktop) and start it."
+        docker_giveup
+      fi
+      ;;
+    linux)
+      if [[ ! -d "${KIND_SYSTEMD_DIR:-/run/systemd/system}" ]] || ! command -v systemctl >/dev/null 2>&1 \
+        || ! systemctl cat docker.service >/dev/null 2>&1; then
+        say_warn "Not starting Docker for you: no systemd docker.service found."
+        return 1
+      fi
+      if [[ "${KIND_EUID:-$EUID}" == "0" ]]; then
+        say_info "Docker is installed but the daemon is not running. Starting it (you are root)."
+        cmdline "systemctl start docker"
+        systemctl start docker || return 1
+      elif sudo -n true >/dev/null 2>&1; then
+        say_info "Docker is installed but the daemon is not running. Starting it (sudo needs no password here)."
+        cmdline "sudo systemctl start docker"
+        sudo systemctl start docker || return 1
+      else
+        say_warn "Not starting Docker for you: that needs root, and sudo would ask for a password."
+        return 1
+      fi
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  if wait_for_docker; then
+    return 0
+  fi
+  check_result "$E_DOCKER" "check 1: is docker installed and running" no
+  docker_timeout_help
+  docker_giveup
+}
+
+# check_docker MODE: MODE is "start" (may start the daemon) or "report" (never does).
+check_docker() {
+  local mode="${1:-report}" err
+  trace command -v docker
+  if ! DOCKER_BIN="$(resolve_tool docker)"; then
+    check_result "$E_DOCKER" "check 1: is docker installed and running" no
+    say_fail "Docker is not installed (command -v docker found nothing)."
+    case "$(os_kind)" in
+      darwin) tip "Install Docker Desktop yourself (this script will not), for example:"; fixcmd "brew install --cask docker-desktop" ;;
+      *) tip "Install Docker Desktop or Docker Engine from https://docs.docker.com/get-docker/" ;;
+    esac
+    docker_giveup
+  fi
+  found_path "$DOCKER_BIN"
+  trace docker info
+  if err="$("$DOCKER_BIN" info 2>&1 >/dev/null)"; then
+    check_result "$E_DOCKER" "check 1: is docker installed and running" yes
+    return 0
+  fi
+
+  local perm=0 kind
+  printf '%s\n' "$err" | grep -qiE 'permission denied|access denied' && perm=1
+  kind="$(os_kind)"
+
+  if ((perm)) && [[ "$kind" == "linux" ]]; then
+    check_result "$E_DOCKER" "check 1: is docker installed and running" no
+    say_fail "Docker is installed but this user cannot talk to the daemon."
+    docker_manual_hints failed
+  elif [[ "$mode" == "start" ]] && ((AUTOSTART_ALLOWED)) && ((!perm)) && [[ "$kind" == "darwin" || "$kind" == "linux" ]]; then
+    if docker_autostart && "$DOCKER_BIN" info >/dev/null 2>&1; then
+      check_result "$E_DOCKER" "check 1: is docker installed and running" yes
+      return 0
+    fi
+    check_result "$E_DOCKER" "check 1: is docker installed and running" no
+    say_fail "Docker is installed but the daemon is not running, and it was not started."
+    docker_manual_hints failed
+  else
+    check_result "$E_DOCKER" "check 1: is docker installed and running" no
+    say_fail "Docker is installed but the daemon is not running."
+    if [[ "$mode" != "start" ]]; then
+      docker_manual_hints report
+    elif ((!AUTOSTART_ALLOWED)); then
+      docker_manual_hints autostart-off
+    else
+      docker_manual_hints failed
+    fi
+  fi
+  if [[ -n "$err" ]]; then
+    say_warn "docker info said:"
+    say_dim "$err"
+  fi
+  docker_giveup
+}
+
+check_kubectl() {
+  trace command -v kubectl
+  if ! KUBECTL_BIN="$(resolve_tool kubectl)"; then
+    check_result "$E_KUBECTL" "check 2: is kubectl installed" no
+    say_fail "kubectl is not installed (command -v kubectl found nothing)."
+    tip "Install it with:"
+    fixcmd "brew install kubectl"
+    tip "Or follow https://kubernetes.io/docs/tasks/tools/"
+    say_warn "This script will not install anything."
+    exit 1
+  fi
+  found_path "$KUBECTL_BIN"
+  check_result "$E_KUBECTL" "check 2: is kubectl installed" yes
+}
+
+check_kind() {
+  trace command -v kind
+  if ! KIND_BIN="$(resolve_tool kind)"; then
+    check_result "$E_KIND" "check 3: is kind installed" no
+    say_fail "kind is not installed (command -v kind found nothing)."
+    tip "Install it with:"
+    fixcmd "brew install kind"
+    tip "Or:"
+    fixcmd "go install sigs.k8s.io/kind@latest"
+    tip "Docs: https://kind.sigs.k8s.io/docs/user/quick-start/"
+    say_warn "This script will not install anything."
+    exit 1
+  fi
+  found_path "$KIND_BIN"
+  check_result "$E_KIND" "check 3: is kind installed" yes
+  trace kind version
+  "$KIND_BIN" version || say_warn "kind is installed, but 'kind version' failed."
+}
+
+deploy_kubectl_commands() {
+  printf '%skubectl command:%s\n' "$DIM" "$RST"
+  cmdline "kubectl --context ${CONTEXT} apply -f -"
+  cmdline "kubectl --context ${CONTEXT} rollout status deployment/${WORKLOAD_NAME} --timeout=${READY_TIMEOUT}"
+  cmdline "kubectl --context ${CONTEXT} wait --for=condition=Ready pod -l app=${WORKLOAD_NAME} --timeout=${READY_TIMEOUT}"
+}
+
+fail_busybox() {
+  check_result "$E_TEST" "check 4: test deploy: deploy busybox" no
+  say_fail "Busybox did not become ready."
+  deploy_kubectl_commands
+  tip "See why with:"
+  fixcmd "kubectl --context ${CONTEXT} describe pod -l app=${WORKLOAD_NAME}"
+  fixcmd "kubectl --context ${CONTEXT} get events"
+  run_kubectl --context "$CONTEXT" describe pod -l "app=${WORKLOAD_NAME}" || true
+  run_kubectl --context "$CONTEXT" get events || true
+  say_warn "Likely causes: the busybox image could not be pulled (network, registry, or ImagePullBackOff), or the pod could not be scheduled."
+  say_warn "This script will not install anything."
+  exit 1
+}
+
+# Set by cluster_exists and cmd_list so legacy_cluster_tip can reuse the list without a second kind call.
+CLUSTERS_OUT=""
+
+cluster_exists() {
+  local clusters_out name
+  if ! clusters_out="$(run_kind get clusters)"; then
+    die "could not list kind clusters"
+  fi
+  CLUSTERS_OUT="$clusters_out"
+  [[ -n "$clusters_out" ]] || return 1
+  while IFS= read -r name; do
+    if [[ "$name" == "$CLUSTER_NAME" ]]; then
+      return 0
+    fi
+  done <<< "$clusters_out"
+  return 1
+}
+
+# legacy_cluster_tip: the default cluster used to be called heyjob-local. kind cannot rename a cluster, so
+# if one is still around, show how to delete it. Never deletes anything itself.
+legacy_cluster_tip() {
+  [[ "$CLUSTER_NAME" != "$LEGACY_CLUSTER_NAME" ]] || return 0
+  local name found=0
+  while IFS= read -r name; do
+    [[ "$name" == "$LEGACY_CLUSTER_NAME" ]] && found=1
+  done <<< "$CLUSTERS_OUT"
+  ((found)) || return 0
+  echo
+  say_warn "Found an older cluster named ${LEGACY_CLUSTER_NAME}. This course now uses ${CLUSTER_NAME}, so ./tools/kind start, stop and destroy do not touch it."
+  tip "kind cannot rename a cluster. Delete the old one (everything in it is disposable) and let ./tools/kind start create the new one. Nothing was deleted for you:"
+  fixcmd "kind delete cluster --name ${LEGACY_CLUSTER_NAME}"
+  say_dim "Keeping both is fine for a while, but two clusters use more memory and may compete for the same host ports."
+  echo
+}
+
+for_each_node() {
+  local action="$1"
+  local node nodes_out
+  if ! nodes_out="$(run_kind get nodes --name "$CLUSTER_NAME")"; then
+    die "could not list nodes for ${CLUSTER_NAME}"
+  fi
+  if [[ -z "${nodes_out//[[:space:]]/}" ]]; then
+    die "cluster ${CLUSTER_NAME} has no nodes"
+  fi
+  while IFS= read -r node; do
+    [[ -n "$node" ]] || continue
+    run_docker "$action" "$node" >/dev/null
+  done <<< "$nodes_out"
+}
+
+apply_busybox() {
+  cat <<EOF | run_kubectl --context "$CONTEXT" apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${WORKLOAD_NAME}
+  labels:
+    app: ${WORKLOAD_NAME}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ${WORKLOAD_NAME}
+  template:
+    metadata:
+      labels:
+        app: ${WORKLOAD_NAME}
+    spec:
+      containers:
+        - name: ${WORKLOAD_NAME}
+          image: busybox
+          command: ["sleep", "infinity"]
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# "Where things are" summary (end of start). Quick and never fatal: every probe is capped and ignores errors.
+# ---------------------------------------------------------------------------
+
+# sum_row EMOJI LABEL TEXT
+sum_row() { printf '  %s%s%-8s%s %s\n' "$1" "$BOLD$CYAN" "$2" "$RST" "$3"; }
+sum_more() { printf '  %s%-11s%s %s\n' "$DIM" "" "$RST" "$1"; }
+
+# kind_config_write FILE: the cluster config with the host ports picked above (same shape as examples/k8s/kind-config.yaml).
+kind_config_write() {
+  local f="$1" np hp
+  mkdir -p "$(dirname "$f")" "$SHARED_DIR"
+  {
+    echo "# Generated by ./tools/kind start. Host ports are fixed when the cluster is created."
+    echo "kind: Cluster"
+    echo "apiVersion: kind.x-k8s.io/v1alpha4"
+    echo "name: ${CLUSTER_NAME}"
+    echo "nodes:"
+    echo "  - role: control-plane"
+    echo "    kubeadmConfigPatches:"
+    echo "      - |"
+    echo "        kind: InitConfiguration"
+    echo "        nodeRegistration:"
+    echo "          kubeletExtraArgs:"
+    echo "            node-labels: \"ingress-ready=true\""
+    echo "    extraPortMappings:"
+    echo "      - {containerPort: 80, hostPort: ${HTTP_PORT}, protocol: TCP}"
+    echo "      - {containerPort: 443, hostPort: ${HTTPS_PORT}, protocol: TCP}"
+    for np in $NODE_PORTS; do
+      hp="$(ports_env_get "KIND_NODEPORT_${np}" || echo "$np")"
+      echo "      - {containerPort: ${np}, hostPort: ${hp}, protocol: TCP}"
+    done
+    echo "    extraMounts:"
+    echo "      - {hostPath: ${SHARED_DIR}, containerPath: /shared}"
+  } > "$f"
+}
+
+# plan_ports: choose free host ports for a NEW cluster (explicit KIND_*_PORT must be free or we stop).
+plan_ports() {
+  section "$BLUE" "${E_DOOR}" "Host ports (chosen now, fixed for the life of the cluster)"
+  local np hp
+  pick_port HTTP_PORT "ingress http" "$HTTP_DEFAULT" "${KIND_HTTP_PORT:-}" || exit 1
+  pick_port HTTPS_PORT "ingress https" "$HTTPS_DEFAULT" "${KIND_HTTPS_PORT:-}" || exit 1
+  ports_env_set KIND_HTTP_PORT "$HTTP_PORT"
+  ports_env_set KIND_HTTPS_PORT "$HTTPS_PORT"
+  for np in $NODE_PORTS; do
+    pick_port hp "nodeport ${np}" "$np" "" 200 || exit 1
+    ports_env_set "KIND_NODEPORT_${np}" "$hp"
+  done
+  ports_env_set KIND_CLUSTER_NAME "$CLUSTER_NAME"
+  say_info "ingress  http://localhost:${HTTP_PORT}   https://localhost:${HTTPS_PORT}"
+  say_dim "  NodePorts ${NODE_PORTS} are published on localhost too (see .logs/ports.env for any that moved)."
+  say_dim "  To pick other ports: ./tools/kind destroy, then KIND_HTTP_PORT=9090 KIND_HTTPS_PORT=9443 ./tools/kind start"
+}
+
+# load_cluster_ports: for an EXISTING cluster read the ports it was created with (docker port), never re-pick.
+load_cluster_ports() {
+  local out np hp
+  out="$(docker port "${CLUSTER_NAME}-control-plane" 2>/dev/null || true)"
+  HTTP_PORT="$(awk '$1 == "80/tcp" {n = split($3, a, ":"); print a[n]; exit}' <<< "$out")"
+  HTTPS_PORT="$(awk '$1 == "443/tcp" {n = split($3, a, ":"); print a[n]; exit}' <<< "$out")"
+  if [[ -z "$HTTP_PORT" ]]; then
+    say_dim "  This cluster has no host port mappings (it was created before ./tools/kind generated them)."
+    say_dim "  For ingress on localhost: ./tools/kind destroy, then ./tools/kind start."
+    return 0
+  fi
+  ports_env_set KIND_HTTP_PORT "$HTTP_PORT"
+  ports_env_set KIND_HTTPS_PORT "$HTTPS_PORT"
+  ports_env_set KIND_CLUSTER_NAME "$CLUSTER_NAME"
+  for np in $NODE_PORTS; do
+    hp="$(awk -v c="${np}/tcp" '$1 == c {n = split($3, a, ":"); print a[n]; exit}' <<< "$out")"
+    [[ -z "$hp" ]] || ports_env_set "KIND_NODEPORT_${np}" "$hp"
+  done
+  say_dim "  Host ports were fixed when the cluster was created: http ${HTTP_PORT}, https ${HTTPS_PORT} (read from docker port)."
+  if [[ -n "${KIND_HTTP_PORT:-}${KIND_HTTPS_PORT:-}" ]]; then
+    say_warn "KIND_HTTP_PORT / KIND_HTTPS_PORT are ignored: the cluster already exists. ./tools/kind destroy, then ./tools/kind start to change ports."
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# "Where things are" summary (end of start). Quick and never fatal: every probe is capped and ignores errors.
+# ---------------------------------------------------------------------------
+
+# sum_row EMOJI LABEL TEXT
+sum_row() { printf '  %s%s%-8s%s %s\n' "$1" "$BOLD$CYAN" "$2" "$RST" "$3"; }
+sum_more() { printf '  %s%-11s%s %s\n' "$DIM" "" "$RST" "$1"; }
+
+print_summary() {
+  ((SHOW_SUMMARY)) || return 0
+  local api
+  api="$("$KUBECTL_BIN" cluster-info --context "$CONTEXT" --request-timeout=5s 2>/dev/null \
+    | sed $'s/\033\\[[0-9;]*[A-Za-z]//g' | grep -Eo 'https?://[^ ]+' | head -n 1 || true)"
+  section "$GREEN" "${E_GLOBE}" "Where things are"
+  sum_row "${E_KUBECTL}" "Cluster" "${CLUSTER_NAME}  ·  context ${CONTEXT}"
+  if [[ -n "$api" ]]; then
+    sum_row "${E_PLUG}" "API" "${api}  ${DIM}(for kubectl, not a browser page; kind has no web UI)${RST}"
+  else
+    sum_row "${E_PLUG}" "API" "kubectl cluster-info --context ${CONTEXT}  ${DIM}(address not readable just now)${RST}"
+  fi
+  if [[ -n "$HTTP_PORT" ]]; then
+    sum_row "${E_DOOR}" "Ingress" "http://localhost:${HTTP_PORT}  ·  https://localhost:${HTTPS_PORT}  ${DIM}(ports in .logs/ports.env)${RST}"
+  fi
+  sum_row "${E_SEARCH}" "Inspect" "kubectl get nodes  ·  kubectl get pods -A  ·  ./tools/kind list  ·  docker ps"
+  sum_row "${E_LOGS}" "Logs" "docker logs ${CLUSTER_NAME}-control-plane  ·  kind export logs ./kind-logs --name ${CLUSTER_NAME}"
+  sum_row "${E_BOOK}" "Docs" "./build.sh serves this repo's docs (default http://localhost:4321, see README.md)"
+}
+
+cmd_start() {
+  box "${E_START}start" "Create or resume ${CLUSTER_NAME} and run ${WORKLOAD_NAME}"
+  section "$CYAN" "${E_SEARCH}" "Preflight"
+  check_docker start
+  check_kubectl
+  check_kind
+
+  section "$GREEN" "${E_START}" "Cluster"
+  local have=0
+  cluster_exists && have=1
+  legacy_cluster_tip
+  if ((have)); then
+    say_info "Cluster ${CLUSTER_NAME} already exists."
+    for_each_node start
+    load_cluster_ports
+  else
+    plan_ports
+    kind_config_write "${LOGS_DIR}/kind-config.yaml"
+    say_wait "Creating cluster ${CLUSTER_NAME}..."
+    if ! run_kind create cluster --name "$CLUSTER_NAME" --config "${LOGS_DIR}/kind-config.yaml" --wait "$READY_TIMEOUT"; then
+      say_fail "kind create cluster failed. The cluster was not created."
+      tip "See the kind error above. Common causes: Docker is out of disk or memory, or the kind node image could not be pulled (network)."
+      say_warn "This script will not install anything."
+      exit 1
+    fi
+  fi
+
+  run_kind export kubeconfig --name "$CLUSTER_NAME"
+
+  say_wait "Waiting for nodes..."
+  if ! run_kubectl --context "$CONTEXT" wait --for=condition=Ready nodes --all --timeout="$READY_TIMEOUT"; then
+    say_fail "The cluster nodes did not become Ready, so busybox was not deployed."
+    tip "See: kubectl --context ${CONTEXT} get nodes"
+    tip "Likely causes: the node container is still starting, Docker is out of disk or memory, or the API server is not up yet."
+    exit 1
+  fi
+
+  section "$MAGENTA" "${E_TEST}" "Test deploy"
+  say_wait "Applying ${WORKLOAD_NAME}..."
+  if ! apply_busybox; then
+    fail_busybox
+  fi
+
+  say_wait "Waiting for ${WORKLOAD_NAME}..."
+  if ! run_kubectl --context "$CONTEXT" rollout status "deployment/${WORKLOAD_NAME}" --timeout="$READY_TIMEOUT"; then
+    fail_busybox
+  fi
+  if ! run_kubectl --context "$CONTEXT" wait --for=condition=Ready pod -l "app=${WORKLOAD_NAME}" --timeout="$READY_TIMEOUT"; then
+    fail_busybox
+  fi
+
+  check_result "$E_TEST" "check 4: test deploy: deploy busybox" yes
+  deploy_kubectl_commands
+
+  run_kubectl config use-context "$CONTEXT" >/dev/null
+
+  echo
+  say_done "Cluster: ${CLUSTER_NAME} is up and running."
+  printf '%s%s%s%s\n' "$CYAN" "$E_PIN" "Check the busybox pod: kubectl get pods" "$RST"
+  print_summary
+}
+
+cmd_stop() {
+  box "${E_STOP}stop" "Stop ${CLUSTER_NAME} node containers (cluster is kept)"
+  section "$CYAN" "${E_SEARCH}" "Preflight"
+  check_docker report
+  check_kind
+  section "$YELLOW" "${E_STOP}" "Stopping"
+  if ! cluster_exists; then
+    say_info "Cluster ${CLUSTER_NAME} does not exist."
+    legacy_cluster_tip
+    return 0
+  fi
+  for_each_node stop
+  printf '%s%s%s%s\n' "$BOLD$YELLOW" "$E_STOP" "Stopped cluster ${CLUSTER_NAME}." "$RST"
+}
+
+cmd_destroy() {
+  box "${E_DESTROY}destroy" "Delete the ${CLUSTER_NAME} cluster"
+  section "$CYAN" "${E_SEARCH}" "Preflight"
+  check_docker report
+  check_kind
+  section "$RED" "${E_BROOM}" "Deleting"
+  if ! cluster_exists; then
+    say_info "Cluster ${CLUSTER_NAME} does not exist."
+    legacy_cluster_tip
+    return 0
+  fi
+  run_kind delete cluster --name "$CLUSTER_NAME"
+  printf '%s%s%s%s\n' "$BOLD$GREEN" "$E_BROOM" "Deleted cluster ${CLUSTER_NAME}." "$RST"
+}
+
+cmd_list() {
+  box "${E_LIST}list" "All kind clusters"
+  section "$CYAN" "${E_SEARCH}" "Preflight"
+  check_docker report
+  check_kind
+  section "$BLUE" "${E_LIST}" "Clusters"
+  local clusters_out line
+  if ! clusters_out="$(run_kind get clusters)"; then
+    die "could not list kind clusters"
+  fi
+  CLUSTERS_OUT="$clusters_out"
+  if [[ -z "$clusters_out" ]]; then
+    say_info "No kind clusters."
+    return 0
+  fi
+  while IFS= read -r line; do
+    printf '  %s%s%s\n' "$BOLD$GREEN" "• $line" "$RST"
+  done <<< "$clusters_out"
+  legacy_cluster_tip
+}
+
+main() {
+  local args=() a
+  for a in "$@"; do
+    if [[ "$a" == "--no-autostart" ]]; then AUTOSTART_ALLOWED=0; else args+=("$a"); fi
+  done
+  set -- "${args[@]+"${args[@]}"}"
+  local cmd="${1:-}"
+  case "$cmd" in
+    ""|-h|--help|help)
+      if [[ $# -gt 1 ]]; then
+        printf '%s%s%s%s\n' "$ERR_BOLD$ERR_RED" "$E_NO" "kind: unexpected argument: $2" "$ERR_RST" >&2
+        usage_err
+        exit 1
+      fi
+      usage
+      ;;
+    start|stop|destroy|list)
+      if [[ $# -ne 1 ]]; then
+        printf '%s%s%s%s\n' "$ERR_BOLD$ERR_RED" "$E_NO" "kind: unexpected argument: $2" "$ERR_RST" >&2
+        usage_err
+        exit 1
+      fi
+      "cmd_${cmd}"
+      ;;
+    *)
+      printf '%s%s%s%s\n' "$ERR_BOLD$ERR_RED" "$E_NO" "kind: unknown command: ${cmd}" "$ERR_RST" >&2
+      usage_err
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

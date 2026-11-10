@@ -1,0 +1,50 @@
+# CLUSTER collector: exactly ONE replica (Deployment). The k8s_cluster receiver asks the API server for
+# cluster-wide state (pod phase, deployment desired/available, node conditions, restarts).
+# Running it in a DaemonSet would make every node report the same cluster state N times.
+mode: deployment
+replicaCount: 1
+fullnameOverride: otel-cluster
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+presets:
+  clusterMetrics: {enabled: true}
+
+resources:
+  requests: {cpu: 50m, memory: 96Mi}
+  limits: {memory: 256Mi}
+
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+    prometheus: null
+    otlp: null
+    k8s_cluster:
+      collection_interval: 20s
+      node_conditions_to_report: [Ready, MemoryPressure, DiskPressure, PIDPressure]
+      allocatable_types_to_report: [cpu, memory]
+  processors:
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    resource/cluster:
+      attributes:
+        - {key: k8s.cluster.name, value: ai-ops-training, action: upsert}
+    batch:
+      timeout: 10s
+  exporters:
+    debug:
+      verbosity: basic
+    otlphttp/gateway:
+      endpoint: http://otel-gateway.observability:4318
+  service:
+    pipelines:
+      logs: null
+      traces: null
+      metrics:
+        receivers: [k8s_cluster]
+        processors: [memory_limiter, resource/cluster, batch]
+        exporters: [debug, otlphttp/gateway]

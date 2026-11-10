@@ -1,0 +1,19 @@
+# Every classic mistake in one Job. check_job.py should flag all of them.
+apiVersion: batch/v1
+kind: Job
+metadata: {name: agent-run-bad, namespace: agents}
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      hostNetwork: true
+      containers:
+        - name: agent
+          image: someorg/agent:latest
+          securityContext: {privileged: true}
+          env:
+            - {name: OPENROUTER_API_KEY, value: "sk-or-v1-0000000000000000FAKE"}
+          volumeMounts: [{name: sock, mountPath: /var/run/docker.sock}]
+      volumes:
+        - name: sock
+          hostPath: {path: /var/run/docker.sock}

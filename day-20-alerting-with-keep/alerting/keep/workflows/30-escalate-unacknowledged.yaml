@@ -1,0 +1,37 @@
+# Escalation SKETCH: if a critical alert has been firing for more than 5 minutes and nobody
+# acknowledged it, email the secondary on-call. Keep has no built-in on-call schedule or escalation
+# policy in the open-source docs we checked, so escalation is modelled as a workflow.
+# Check the Keep docs for the exact fields of the "keep" provider (version 2 filter) and enrichment before relying on this.
+workflow:
+  id: escalate-unacknowledged
+  name: "Escalate critical alerts nobody acknowledged within 5 minutes"
+  consts:
+    secondary: "bob@heyjob.local"
+  triggers:
+    - type: manual
+    - type: interval
+      value: 60
+  steps:
+    - name: firing-critical
+      provider:
+        type: keep
+        with:
+          version: 2
+          filter: "status == 'firing' && severity == 'critical'"
+  actions:
+    - name: email-secondary
+      foreach: " {{ steps.firing-critical.results }} "
+      if: "keep.to_timestamp('{{ foreach.value.lastReceived }}') < keep.utcnowtimestamp() - 300 and '{{ foreach.value.escalated }}' != 'true'"
+      provider:
+        type: smtp
+        config: "{{ providers.mailpit }}"
+        with:
+          from_email: "keep@heyjob.local"
+          from_name: "Keep escalation"
+          to_email:
+            - "{{ consts.secondary }}"
+          subject: "[ESCALATED] not acknowledged in 5 minutes: {{ foreach.value.name }}"
+          body: "{{ foreach.value.description }} Runbook: {{ foreach.value.labels.runbook }}"
+          enrich_alert:
+            - key: escalated
+              value: "true"

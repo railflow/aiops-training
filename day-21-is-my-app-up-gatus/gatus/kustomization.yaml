@@ -1,0 +1,13 @@
+# kubectl apply -k day-21-is-my-app-up-gatus/gatus   (creates the ConfigMap from config/config.yaml and the Deployment, Service, Ingress)
+# Create the Secret first (see the lesson): gatus-keep with key KEEP_API_KEY.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: gatus
+resources:
+  - gatus.yaml
+configMapGenerator:
+  - name: gatus-config
+    files:
+      - config/config.yaml
+generatorOptions:
+  disableNameSuffixHash: true

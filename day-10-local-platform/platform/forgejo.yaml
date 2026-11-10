@@ -1,0 +1,62 @@
+# Forgejo (Git + issues + Actions) with SQLite, for learning only.
+# The ROOT_URL is the in-cluster address so Actions job containers can clone from it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: forgejo-data, namespace: platform}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 2Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: forgejo, namespace: platform, labels: {app: forgejo}}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: forgejo}}
+  template:
+    metadata: {labels: {app: forgejo}}
+    spec:
+      securityContext: {fsGroup: 1000}
+      containers:
+        - name: forgejo
+          image: codeberg.org/forgejo/forgejo:11-rootless
+          env:
+            - {name: FORGEJO__server__DOMAIN, value: forgejo.platform.svc.cluster.local}
+            - {name: FORGEJO__server__ROOT_URL, value: "http://forgejo.platform.svc.cluster.local:3000/"}
+            - {name: FORGEJO__server__HTTP_PORT, value: "3000"}
+            - {name: FORGEJO__server__DISABLE_SSH, value: "true"}
+            - {name: FORGEJO__database__DB_TYPE, value: sqlite3}
+            - {name: FORGEJO__security__INSTALL_LOCK, value: "true"}
+            - {name: FORGEJO__actions__ENABLED, value: "true"}
+            - {name: FORGEJO__service__DISABLE_REGISTRATION, value: "true"}
+          ports: [{containerPort: 3000}]
+          readinessProbe: {httpGet: {path: /api/healthz, port: 3000}, initialDelaySeconds: 10, periodSeconds: 5}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 768Mi}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/gitea}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: forgejo-data}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: forgejo, namespace: platform}
+spec:
+  selector: {app: forgejo}
+  ports: [{name: http, port: 3000, targetPort: 3000}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: forgejo, namespace: platform}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: forgejo.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: forgejo, port: {number: 3000}}}

@@ -1,0 +1,43 @@
+# The "backend": the Java REST API in namespace backend, reachable inside the cluster as java-api.backend.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-api
+  namespace: backend
+  labels:
+    app: java-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: java-api
+  template:
+    metadata:
+      labels:
+        app: java-api
+    spec:
+      containers:
+        - name: java-api
+          image: hello-java-app:1.1
+          imagePullPolicy: IfNotPresent
+          command: ["java", "-cp", "/app/app.jar", "com.example.Api"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-api
+  namespace: backend
+spec:
+  selector:
+    app: java-api
+  ports:
+    - port: 80
+      targetPort: 8080

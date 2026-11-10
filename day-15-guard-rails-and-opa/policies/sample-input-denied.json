@@ -1,0 +1,8 @@
+{
+  "service": "hello-java",
+  "image": "nexus.platform.svc.cluster.local:5000/hello-java-app:abc1234",
+  "coverage": 6.4,
+  "vulnerabilities": {"critical": 1, "high": 3},
+  "timezone": "America/Los_Angeles",
+  "now_ns": 1793941200000000000
+}

@@ -1,0 +1,14 @@
+# Extra values for the Traefik chart so Flagger's Prometheus can scrape Traefik's metrics (Day 22).
+# Apply on top of your Day 7 values:
+#   helm upgrade traefik traefik/traefik -n traefik -f day-07-traefik-ingress/traefik/values-kind.yaml -f day-22-progressive-delivery-flux-flagger/gitops/traefik-metrics-values.yaml
+# The pod annotations are the ones Flagger's Traefik tutorial uses with its bundled Prometheus; the chart exposes the
+# "metrics" entry point on port 9100 by default. Check `helm show values traefik/traefik` for your chart version.
+deployment:
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9100"
+    prometheus.io/path: "/metrics"
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addServicesLabels: true

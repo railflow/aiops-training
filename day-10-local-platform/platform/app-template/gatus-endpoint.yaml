@@ -1,0 +1,10 @@
+# Add under `endpoints:` in the Gatus config (day-21-is-my-app-up-gatus/gatus/config/config.yaml), group "apps".
+- name: __APP__
+  group: apps
+  url: http://__APP__.__APP__.svc.cluster.local/readyz
+  interval: 30s
+  conditions:
+    - "[STATUS] == 200"
+    - "[RESPONSE_TIME] < 500"
+  alerts:
+    - type: custom

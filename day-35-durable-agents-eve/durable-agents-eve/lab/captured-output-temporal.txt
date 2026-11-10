@@ -1,0 +1,19 @@
+
+=== TEMPORAL, worker killed while the workflow waits for approval ===
+  workflow is waiting for a signal; steps done: ['run_tests', 'write_test_file', 'run_tests', 'git_commit']
+  kill -9 on the worker
+  new worker started (new process)
+  result: finished billing-001: 5 steps done
+  ok: no finished activity ran again
+  ok: one pull request
+  ok: the first four steps ran in the first worker; the second worker replayed them from history and only ran open_pr
+
+=== TEMPORAL, worker dies in the middle of an activity (after its effect, before the result was recorded) ===
+  worker died inside write_test_file; the server is waiting for the activity timeout (5 s) before it retries
+  result: finished billing-002: 5 steps done
+  write_test_file started 2x, finished 1x
+  ok: the interrupted activity ran again: activities are at-least-once
+  ok: the other activities ran once each
+  ok: one pull request
+
+all scenarios held

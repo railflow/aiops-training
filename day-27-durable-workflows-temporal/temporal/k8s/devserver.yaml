@@ -1,0 +1,38 @@
+# DEV ONLY: the Temporal CLI's built-in dev server (in-memory unless you add --db-filename and a volume) as a single pod.
+# One process, no Postgres, state lost when the pod restarts. Great for the concept lab, wrong for anything you care about.
+# Image temporalio/temporal is "the Temporal CLI and development server" on Docker Hub. The args assume the image's entrypoint is the
+# temporal binary: if the pod crash-loops, check `docker run --rm temporalio/temporal:1.10.0 --help` and the image docs. NOT run by the author.
+apiVersion: v1
+kind: Namespace
+metadata: {name: temporal-dev}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: temporal-dev, namespace: temporal-dev, labels: {app: temporal-dev}}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: temporal-dev}}
+  template:
+    metadata: {labels: {app: temporal-dev}}
+    spec:
+      containers:
+        - name: temporal
+          image: temporalio/temporal:1.10.0
+          args: ["server", "start-dev", "--ip", "0.0.0.0", "--port", "7233", "--ui-port", "8233", "--namespace", "enterprise"]
+          ports:
+            - {name: grpc, containerPort: 7233}
+            - {name: ui, containerPort: 8233}
+          readinessProbe: {tcpSocket: {port: grpc}, initialDelaySeconds: 5, periodSeconds: 5}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 768Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: temporal-dev, namespace: temporal-dev}
+spec:
+  selector: {app: temporal-dev}
+  ports:
+    - {name: grpc, port: 7233, targetPort: grpc}
+    - {name: ui, port: 8233, targetPort: ui}

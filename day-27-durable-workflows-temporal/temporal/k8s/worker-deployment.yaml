@@ -1,0 +1,45 @@
+# Two workers of the Python MonthlyTaxProcessingWorkflow. Workers make OUTBOUND gRPC calls only: they serve no application HTTP.
+# Image: build and load into kind first (see Day 27):  docker build -t tax-worker:1.0 ../python && kind load docker-image tax-worker:1.0 --name ai-ops-training
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tax-worker
+  namespace: temporal-apps
+  labels: {app: tax-worker}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: tax-worker}
+  template:
+    metadata:
+      labels: {app: tax-worker}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9000"
+    spec:
+      terminationGracePeriodSeconds: 30        # longer than the worker's graceful_shutdown_timeout (20s)
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: worker
+          image: tax-worker:1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: TEMPORAL_ADDRESS, value: "temporal-frontend.temporal.svc.cluster.local:7233"}
+            - {name: TEMPORAL_NAMESPACE, value: "default"}
+            - {name: TASK_QUEUE, value: "enterprise-batch-queue"}
+            - {name: PDF_COUNT, value: "20"}
+            - {name: PDF_SECONDS_EACH, value: "1"}
+            - {name: IRS_FAIL_TIMES, value: "0"}      # kubectl set env deploy/tax-worker IRS_FAIL_TIMES=3 to rehearse an outage
+            # TEMPORAL_API_KEY (Temporal Cloud only) would come from a Secret via secretKeyRef, never from a literal here.
+          ports: [{name: metrics, containerPort: 9000}]
+          # No HTTP server: a TCP check on the metrics port proves the process is alive and the SDK runtime started.
+          # It does NOT prove the worker can reach Temporal; watch the temporal_worker_task_slots_available / poll metrics for that.
+          readinessProbe: {tcpSocket: {port: metrics}, initialDelaySeconds: 3, periodSeconds: 10}
+          livenessProbe: {tcpSocket: {port: metrics}, initialDelaySeconds: 15, periodSeconds: 20}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}

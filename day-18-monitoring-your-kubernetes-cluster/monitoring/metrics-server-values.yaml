@@ -1,0 +1,6 @@
+# metrics-server on kind. Chart: metrics-server/metrics-server (helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/).
+# kind's kubelets serve self-signed certificates, so metrics-server must be told not to verify them.
+# WARNING: --kubelet-insecure-tls is for LOCAL clusters only. Real clusters have kubelet serving
+# certificates signed by the cluster CA; production never disables this check.
+args:
+  - --kubelet-insecure-tls

@@ -1,0 +1,36 @@
+---
+title: Example product docs
+description: A small Starlight site that Day 28 of the course builds, link-checks and serves from your cluster.
+template: splash
+hero:
+  tagline: Docs live in git, build in CI, and break the build when a link goes stale.
+  actions:
+    - text: Read the overview
+      link: /start/overview/
+      icon: right-arrow
+    - text: Roll back a deploy
+      link: /how-to/roll-back-a-deploy/
+      icon: open-book
+      variant: secondary
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## What is here
+
+<CardGrid>
+	<Card title="Tutorial-sized overview" icon="rocket">
+		One page that says what the product does and where the other kinds of docs live.
+	</Card>
+	<Card title="How-to guide" icon="puzzle">
+		A runbook-style page with a Mermaid diagram, steps and a troubleshooting table.
+	</Card>
+	<Card title="Reference" icon="setting">
+		A flags-and-endpoints table: complete and dry, which is what reference should be.
+	</Card>
+	<Card title="Link checked" icon="approve-check">
+		`starlight-links-validator` fails the build on a broken internal link or anchor.
+	</Card>
+</CardGrid>
+
+<LinkCard title="Overview" description="What the site is and how it is organised." href="/start/overview/" />

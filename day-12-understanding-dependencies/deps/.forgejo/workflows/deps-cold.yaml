@@ -1,0 +1,45 @@
+# Cold cache on purpose: every run starts from an empty job container and downloads everything.
+# Copy to .forgejo/workflows/ in your hello-apps repo (with the three deps/ folders at its root).
+name: deps-cold
+on: [push]
+jobs:
+  node:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and run (timed)
+        working-directory: deps/node-hello
+        run: |
+          start=$(date +%s)
+          npm ci --no-audit --no-fund
+          echo "npm ci took $(( $(date +%s) - start ))s"
+          du -sh node_modules
+          node index.js
+  python:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and run (timed)
+        working-directory: deps/python-hello
+        run: |
+          apt-get update -qq && apt-get install -y -qq python3-venv python3-pip > /dev/null
+          start=$(date +%s)
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install -q -r requirements.txt
+          echo "pip install took $(( $(date +%s) - start ))s"
+          du -sh /tmp/venv
+          /tmp/venv/bin/python hello.py
+  java:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install and run (timed)
+        working-directory: deps/java-maven
+        run: |
+          apt-get update -qq && apt-get install -y -qq maven default-jdk-headless > /dev/null
+          start=$(date +%s)
+          mvn -B -q dependency:copy-dependencies -DoutputDirectory=target/lib
+          echo "maven resolve took $(( $(date +%s) - start ))s"
+          du -sh target/lib ~/.m2
+          mvn -B -q compile
+          java -cp "target/classes:target/lib/*" hello.Main

@@ -1,0 +1,10 @@
+# In the config repo: apps/docs/ holds a copy of ../k8s/docs.yaml (with the image tag CI updates). Flux applies it.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata: {name: docs, namespace: flux-system}
+spec:
+  interval: 1m
+  sourceRef: {kind: GitRepository, name: hello-config}    # the GitRepository from Day 22
+  path: ./apps/docs
+  prune: true
+  timeout: 3m

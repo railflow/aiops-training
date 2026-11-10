@@ -1,0 +1,27 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "web",
+      "version": "1.0.0"
+    },
+    "properties": [
+      {
+        "name": "note",
+        "value": "SYNTHETIC sample for the course, not generated from a real build"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "commons-lang3",
+      "group": "org.apache.commons",
+      "version": "3.12.0",
+      "purl": "pkg:maven/org.apache.commons/commons-lang3@3.12.0"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+# Alpine uses musl libc instead of glibc. Small, but some Python wheels and native libraries behave differently:
+# test your real app before choosing it.
+FROM python:3.12-alpine
+WORKDIR /app
+COPY requirements.fixed.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+CMD ["python", "app.py"]

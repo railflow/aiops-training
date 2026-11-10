@@ -1,0 +1,43 @@
+// The same Java sources as ../../day-04-data-services-and-appwrite/java-app, built with Gradle instead of Maven.
+plugins {
+    id 'java'
+    id 'application'
+    id 'jacoco'
+}
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+sourceSets {
+    main.java.srcDirs = ['../../day-04-data-services-and-appwrite/java-app/src/main/java']
+    test.java.srcDirs = ['../../day-04-data-services-and-appwrite/java-app/src/test/java']
+}
+
+dependencies {
+    implementation 'org.postgresql:postgresql:42.7.4'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.3'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    mainClass = 'com.example.Api'
+}
+
+test {
+    useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}

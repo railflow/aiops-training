@@ -1,0 +1,174 @@
+# Gatus configuration. Every endpoint is probed from OUTSIDE the apps (blackbox), on an interval.
+# Reference: https://github.com/TwiN/gatus (README sections: Endpoints, Conditions, Alerting, Metrics).
+# ${KEEP_API_KEY} is substituted from the environment (the key lives in a Kubernetes Secret, never in this file).
+web:
+  port: 8080
+
+# memory storage: results vanish when the pod restarts. For history use storage.type sqlite (path on a volume) or postgres.
+storage:
+  type: memory
+  maximum-number-of-results: 200
+  maximum-number-of-events: 50
+
+metrics: true
+
+ui:
+  title: "ai-ops-training status"
+  header: "Is my app up and OK?"
+
+# Gatus never messages people itself. Its one "custom" alert provider posts to Keep (Day 20), the single notifier.
+# POST /alerts/event with an X-API-KEY header is Keep's generic ingestion endpoint.
+# TRIGGERED / RESOLVED are renamed to the status words Keep understands.
+alerting:
+  custom:
+    url: "http://keep-backend.keep:8080/alerts/event"
+    method: "POST"
+    headers:
+      Content-Type: "application/json"
+      X-API-KEY: "${KEEP_API_KEY}"
+    body: |
+      {
+        "name": "[ENDPOINT_NAME] failed an outside-in check",
+        "status": "[ALERT_TRIGGERED_OR_RESOLVED]",
+        "severity": "critical",
+        "source": ["gatus"],
+        "service": "[ENDPOINT_NAME]",
+        "description": "[ALERT_DESCRIPTION] ([ENDPOINT_GROUP], [ENDPOINT_URL])",
+        "labels": {"service": "[ENDPOINT_NAME]", "group": "[ENDPOINT_GROUP]", "team": "shop"}
+      }
+    placeholders:
+      ALERT_TRIGGERED_OR_RESOLVED:
+        TRIGGERED: "firing"
+        RESOLVED: "resolved"
+    default-alert:
+      failure-threshold: 3
+      success-threshold: 2
+      send-on-resolved: true
+      description: "health check failed"
+
+endpoints:
+  # ---- Group "apps": the three hello REST apps, probed through their Service DNS names ----
+  - name: hello-py
+    group: apps
+    url: "http://hello-py.apps/healthz"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == ok"
+      - "[RESPONSE_TIME] < 300"
+    alerts:
+      - type: custom
+  - name: hello-py-ready
+    group: apps
+    url: "http://hello-py.apps/readyz"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == ready"
+  - name: hello-py-version
+    group: apps
+    url: "http://hello-py.apps/version"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].service == hello-py"
+      - "[BODY].version == 1.2"
+  - name: hello-java
+    group: apps
+    url: "http://hello-java.apps/healthz"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == ok"
+      - "[RESPONSE_TIME] < 500"
+    alerts:
+      - type: custom
+  - name: hello-go
+    group: apps
+    url: "http://hello-go.apps/healthz"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == ok"
+      - "[RESPONSE_TIME] < 300"
+    alerts:
+      - type: custom
+
+  # ---- Group "edge": the same app through the front door users use (Traefik, Host header) ----
+  - name: hello-py-via-traefik
+    group: edge
+    url: "http://traefik.traefik/healthz"
+    headers:
+      Host: "hello-py.localhost"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].status == ok"
+    alerts:
+      - type: custom
+
+  # ---- Group "shop": the observability demo app. The endpoint NAME equals the label "service" that the
+  # ClickHouse alerts in Day 20 put on their alerts, so Keep can correlate both into one incident. ----
+  - name: shop-frontend
+    group: shop
+    url: "http://shop-frontend.apps/checkout"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[RESPONSE_TIME] < 1000"
+    alerts:
+      - type: custom
+  - name: shop-backend
+    group: shop
+    url: "http://shop-backend.apps/healthz"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+
+  # ---- Group "platform": things the apps depend on ----
+  - name: postgres-port
+    group: platform
+    url: "tcp://postgres.data:5432"
+    interval: 30s
+    conditions:
+      - "[CONNECTED] == true"
+  - name: keep
+    group: platform
+    url: "http://keep-frontend.keep:3000/"
+    interval: 1m
+    conditions:
+      - "[STATUS] == any(200, 307)"
+  - name: clickhouse
+    group: platform
+    url: "http://clickhouse.observability:8123/ping"
+    interval: 30s
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY] == pat(Ok*)"
+  - name: cluster-dns
+    group: platform
+    url: "10.96.0.10"
+    dns:
+      query-name: "hello-py.apps.svc.cluster.local"
+      query-type: "A"
+    interval: 1m
+    conditions:
+      - "[DNS_RCODE] == NOERROR"
+    # 10.96.0.10 is the usual kube-dns Service IP on kind: check with `kubectl -n kube-system get svc kube-dns`.
+
+  # ---- Examples that need something this lab does not have; copy and adapt ----
+  # An authenticated check: the token comes from an environment variable, never from this file.
+  #   - name: internal-api
+  #     url: "https://api.example.internal/health"
+  #     headers:
+  #       Authorization: "Bearer ${INTERNAL_API_TOKEN}"
+  #     conditions: ["[STATUS] == 200"]
+  # A certificate check (TLS) and a domain-expiry check:
+  #   - name: public-site-cert
+  #     url: "https://example.org"
+  #     interval: 1h
+  #     conditions: ["[STATUS] == 200", "[CERTIFICATE_EXPIRATION] > 336h", "[DOMAIN_EXPIRATION] > 720h"]
+  # ICMP (ping): works unprivileged on recent Gatus versions; on kind it only tells you about the node network.
+  #   - name: ping-example
+  #     url: "icmp://example.com"
+  #     conditions: ["[CONNECTED] == true"]

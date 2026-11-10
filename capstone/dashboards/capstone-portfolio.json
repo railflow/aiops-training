@@ -1,0 +1,423 @@
+{
+  "uid": "capstone-portfolio",
+  "title": "Capstone: portfolio",
+  "tags": [
+    "capstone"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "1m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "graphTooltip": 1,
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Repos measured",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT count() AS repos FROM (SELECT repo, argMax(language, ts) AS language, argMax(lines_of_code, ts) AS loc, argMax(line_coverage_pct, ts) AS cov, argMax(vuln_critical, ts) AS vc, argMax(vuln_high, ts) AS vh, argMax(secrets_found, ts) AS secrets, argMax(test_count, ts) AS tests, argMax(tests_failed, ts) AS failed FROM capstone.repo_measurements GROUP BY repo)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total lines of code",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT sum(loc) AS lines FROM (SELECT repo, argMax(language, ts) AS language, argMax(lines_of_code, ts) AS loc, argMax(line_coverage_pct, ts) AS cov, argMax(vuln_critical, ts) AS vc, argMax(vuln_high, ts) AS vh, argMax(secrets_found, ts) AS secrets, argMax(test_count, ts) AS tests, argMax(tests_failed, ts) AS failed FROM capstone.repo_measurements GROUP BY repo)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Average line coverage (latest per repo)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 5,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT round(avg(cov), 1) AS avg_cov FROM (SELECT repo, argMax(language, ts) AS language, argMax(lines_of_code, ts) AS loc, argMax(line_coverage_pct, ts) AS cov, argMax(vuln_critical, ts) AS vc, argMax(vuln_high, ts) AS vh, argMax(secrets_found, ts) AS secrets, argMax(test_count, ts) AS tests, argMax(tests_failed, ts) AS failed FROM capstone.repo_measurements GROUP BY repo)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "green",
+                "value": 60
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Critical + high vulnerabilities",
+      "description": "Null when trivy was not available in the measure image.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 13,
+        "y": 0,
+        "w": 5,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT sum(vc) + sum(vh) AS vulns FROM (SELECT repo, argMax(language, ts) AS language, argMax(lines_of_code, ts) AS loc, argMax(line_coverage_pct, ts) AS cov, argMax(vuln_critical, ts) AS vc, argMax(vuln_high, ts) AS vh, argMax(secrets_found, ts) AS secrets, argMax(test_count, ts) AS tests, argMax(tests_failed, ts) AS failed FROM capstone.repo_measurements GROUP BY repo)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Planted bugs found (recall)",
+      "description": "Uses the answer key. Never expose the key to the agents: only this dashboard reads it.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT round(100 * (SELECT uniqExact(repo, planted_id) FROM capstone.issue_matches) / nullIf((SELECT count() FROM capstone.planted_issues), 0), 1) AS recall_pct",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Average coverage over time",
+      "description": "Averages every measurement in the bucket, including baselines of repos not yet touched: read the drilldown for per-repo truth.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "timeseries",
+          "rawSql": "SELECT $__timeInterval(ts) AS time, avg(line_coverage_pct) AS avg_line_coverage FROM capstone.repo_measurements WHERE $__timeFilter(ts) AND line_coverage_pct IS NOT NULL GROUP BY time ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "type": "barchart",
+      "title": "Repos by language",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT language, count() AS repos FROM (SELECT repo, argMax(language, ts) AS language, argMax(lines_of_code, ts) AS loc, argMax(line_coverage_pct, ts) AS cov, argMax(vuln_critical, ts) AS vc, argMax(vuln_high, ts) AS vh, argMax(secrets_found, ts) AS secrets, argMax(test_count, ts) AS tests, argMax(tests_failed, ts) AS failed FROM capstone.repo_measurements GROUP BY repo) GROUP BY language ORDER BY repos DESC",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Worst 15 repos (lowest coverage, then most vulnerabilities)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT repo, language, round(cov, 1) AS coverage_pct, vc AS critical, vh AS high, secrets, failed AS tests_failed FROM (SELECT repo, argMax(language, ts) AS language, argMax(lines_of_code, ts) AS loc, argMax(line_coverage_pct, ts) AS cov, argMax(vuln_critical, ts) AS vc, argMax(vuln_high, ts) AS vh, argMax(secrets_found, ts) AS secrets, argMax(test_count, ts) AS tests, argMax(tests_failed, ts) AS failed FROM capstone.repo_measurements GROUP BY repo) ORDER BY cov ASC, vc DESC LIMIT 15",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Biggest gains (baseline to latest)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT l.repo AS repo, round(f.cov, 1) AS baseline_pct, round(l.cov, 1) AS latest_pct, round(l.cov - f.cov, 1) AS gain_pct FROM (SELECT repo, argMax(language, ts) AS language, argMax(lines_of_code, ts) AS loc, argMax(line_coverage_pct, ts) AS cov, argMax(vuln_critical, ts) AS vc, argMax(vuln_high, ts) AS vh, argMax(secrets_found, ts) AS secrets, argMax(test_count, ts) AS tests, argMax(tests_failed, ts) AS failed FROM capstone.repo_measurements GROUP BY repo) AS l JOIN (SELECT repo, argMin(line_coverage_pct, ts) AS cov FROM capstone.repo_measurements WHERE iteration = 0 GROUP BY repo) AS f ON l.repo = f.repo ORDER BY gain_pct DESC LIMIT 15",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Cost per coverage point",
+      "description": "A repo with cost and zero gain has usd_per_point NULL: that is the signal.",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT a.repo AS repo, round(sum(a.cost_usd), 2) AS cost_usd, round(any(g.gain), 1) AS gain_pct, round(sum(a.cost_usd) / nullIf(any(g.gain), 0), 2) AS usd_per_point FROM capstone.agent_runs AS a LEFT JOIN (SELECT repo, argMax(line_coverage_pct, ts) - argMinIf(line_coverage_pct, ts, iteration = 0) AS gain FROM capstone.repo_measurements WHERE line_coverage_pct IS NOT NULL GROUP BY repo) AS g ON g.repo = a.repo GROUP BY a.repo ORDER BY usd_per_point DESC",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 11,
+      "type": "barchart",
+      "title": "Agent runs by outcome",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT outcome, count() AS runs FROM capstone.agent_runs GROUP BY outcome ORDER BY runs DESC",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    }
+  ],
+  "links": [],
+  "annotations": {
+    "list": []
+  }
+}

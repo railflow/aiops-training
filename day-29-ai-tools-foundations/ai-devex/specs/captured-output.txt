@@ -1,0 +1,8 @@
+specs/examples/good.md: ok
+specs/examples/bad.md: section 'Non-goals' is missing or empty
+specs/examples/bad.md: section 'Rollback' is missing or empty
+specs/examples/bad.md: AC-1: vague word 'well'; say what is measured
+specs/examples/bad.md: AC-2: vague word 'Clean'; say what is measured
+specs/examples/bad.md: AC-2: too short to be checkable
+specs/examples/bad.md: test plan: no mention of AC-1
+specs/examples/bad.md: test plan: no mention of AC-2

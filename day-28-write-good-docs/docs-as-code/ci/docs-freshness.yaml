@@ -1,0 +1,35 @@
+# Weekly: ask an AI agent to compare docs with code and open an ISSUE (never push to main) listing drift.
+# Flags used were read from `claude --help` (Claude Code 2.1.278): -p, --output-format, --allowedTools, --permission-mode, --max-budget-usd.
+# `--max-turns` was not listed by that help output: check the docs for your version before relying on it, and use --max-budget-usd and the job timeout.
+# Needs a secret ANTHROPIC_API_KEY and a FORGEJO_TOKEN scoped to issues:write on this repo. Both come from Forgejo secrets, never from the repo.
+name: docs-freshness
+on:
+  schedule:
+    - cron: "0 6 * * 1"            # Mondays 06:00 UTC
+  workflow_dispatch: {}
+jobs:
+  freshness:
+    runs-on: docker
+    timeout-minutes: 20
+    container:
+      image: nexus.platform.svc.cluster.local:5000/builder:1      # add the Claude Code CLI to this image (pinned version), or install it in a step
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Ask for a drift report (read-only tools)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          claude -p "Follow .claude/commands/doc-sync.md for the whole repository. Do not edit files. Output a Markdown report only." \
+            --output-format json \
+            --permission-mode dontAsk \
+            --allowedTools "Read" "Grep" "Glob" "Bash(git log:*)" "Bash(git diff:*)" \
+            --max-budget-usd 2 > report.json
+          jq -r '.result' report.json > report.md
+      - name: Open an issue with the report
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+        run: |
+          jq -n --arg title "Docs freshness report $(date -u +%F)" --rawfile body report.md '{title:$title, body:$body, labels:[]}' > issue.json
+          curl -fsS -X POST -H "Authorization: token ${FORGEJO_TOKEN}" -H "Content-Type: application/json" \
+            "${{ github.server_url }}/api/v1/repos/${{ github.repository }}/issues" -d @issue.json > /dev/null

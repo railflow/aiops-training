@@ -1,0 +1,14 @@
+{
+  "timezone": "UTC",
+  "rotation": "weekly",
+  "start": "2026-11-02",
+  "people": [
+    {"name": "Alice", "email": "alice@heyjob.local"},
+    {"name": "Bob",   "email": "bob@heyjob.local"},
+    {"name": "Chen",  "email": "chen@heyjob.local"}
+  ],
+  "overrides": [
+    {"from": "2026-11-16", "to": "2026-11-22", "primary": "chen@heyjob.local", "secondary": "alice@heyjob.local", "reason": "swap: Alice on holiday (example)"}
+  ],
+  "escalation": {"acknowledge_within_minutes": 5, "then": "secondary", "then_after_minutes": 15, "finally": "team-lead@heyjob.local"}
+}

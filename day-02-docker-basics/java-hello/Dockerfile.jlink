@@ -1,0 +1,16 @@
+# Stage 1: compile, then use jlink to build a minimal Java runtime that
+# contains only the modules this app needs (java.base is enough here).
+FROM eclipse-temurin:21-jdk AS build
+WORKDIR /src
+COPY Hello.java .
+RUN javac -d /out Hello.java
+RUN jlink --add-modules java.base \
+      --strip-debug --no-man-pages --no-header-files --compress=zip-6 \
+      --output /jre
+
+# Stage 2: the temurin images are Ubuntu 24.04 based, so run the jlinked JRE
+# on Ubuntu 24.04 too (a runtime built against a newer glibc can fail on an older OS).
+FROM ubuntu:24.04
+COPY --from=build /jre /opt/jre
+COPY --from=build /out/Hello.class /app/Hello.class
+ENTRYPOINT ["/opt/jre/bin/java", "-cp", "/app", "Hello"]

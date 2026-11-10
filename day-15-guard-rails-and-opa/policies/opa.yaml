@@ -1,0 +1,30 @@
+# OPA running as an HTTP decision service in the cluster. Policies come from the ConfigMap
+# "opa-policies" which you create from the .rego files (see the lesson), never by hand-editing here.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: opa, namespace: platform, labels: {app: opa}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: opa}}
+  template:
+    metadata: {labels: {app: opa}}
+    spec:
+      containers:
+        - name: opa
+          image: openpolicyagent/opa:1.0.0
+          args: ["run", "--server", "--addr=:8181", "--log-level=info", "/policies"]
+          ports: [{containerPort: 8181}]
+          readinessProbe: {httpGet: {path: /health, port: 8181}, periodSeconds: 5}
+          resources: {limits: {memory: 256Mi}}
+          volumeMounts:
+            - {name: policies, mountPath: /policies, readOnly: true}
+      volumes:
+        - name: policies
+          configMap: {name: opa-policies}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: opa, namespace: platform}
+spec:
+  selector: {app: opa}
+  ports: [{name: http, port: 8181, targetPort: 8181}]

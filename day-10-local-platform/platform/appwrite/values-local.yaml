@@ -1,0 +1,25 @@
+# Appwrite on the course's kind cluster (Traefik from Day 7, reached at http://appwrite.localhost:8080).
+# Chart: oci://ghcr.io/appwrite/charts/appwrite  (version pinned in tools/versions.env)
+#   helm install appwrite oci://ghcr.io/appwrite/charts/appwrite --version "$APPWRITE_CHART_VERSION" \
+#     --namespace appwrite --create-namespace -f values-local.yaml --wait --timeout 15m
+appwrite:
+  domain: appwrite.localhost            # browsers resolve *.localhost to your machine
+  certificatesEmail: student@example.com  # required by the chart; unused without HTTPS
+  forceHttps: false                     # nothing terminates TLS locally
+  config:
+    # Cap what a single function can ask for, so one runtime cannot claim the executor pod.
+    _APP_COMPUTE_CPUS: 1
+    _APP_COMPUTE_MEMORY: 512
+
+ingress:
+  enabled: true
+  className: traefik
+
+compute:
+  # The executor pulls an image for EVERY runtime listed, then reports ready: list only what you use.
+  functionsRuntimes: [node-22, python-3.12, go-1.26]
+  sitesRuntimes: [static-1, node-22]    # sites are built with node-22; keep it even for static sites
+
+# Memory savers for a laptop. Both are optional components; check the chart's optional-components guide before relying on this.
+browser:
+  enabled: false     # only renders Site preview screenshots

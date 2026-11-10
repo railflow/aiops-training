@@ -1,0 +1,4 @@
+# measure.py and ship.py use only the standard library. These are for the tests.
+pytest
+pytest-cov
+chdb

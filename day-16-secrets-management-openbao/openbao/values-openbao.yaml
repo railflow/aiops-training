@@ -1,0 +1,14 @@
+# Helm values for OpenBao in DEV MODE on kind (learning only: in-memory storage, auto-unsealed,
+# a well-known root token, no TLS). Check them against your chart version:
+#   helm show values openbao/openbao | less
+server:
+  dev:
+    enabled: true
+    devRootToken: "root"
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}
+injector:
+  enabled: false
+ui:
+  enabled: true

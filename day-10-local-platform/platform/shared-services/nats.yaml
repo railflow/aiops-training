@@ -1,0 +1,35 @@
+# Shared NATS with JetStream (messaging and streams). One account for the lab; real multi-tenancy uses NATS accounts.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: nats, namespace: platform-data}
+spec:
+  serviceName: nats
+  replicas: 1
+  selector: {matchLabels: {app: nats}}
+  template:
+    metadata: {labels: {app: nats}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: nats
+          image: nats:2.11-alpine
+          args: ["-js", "-sd", "/data", "-m", "8222"]
+          ports: [{name: client, containerPort: 4222}, {name: monitor, containerPort: 8222}]
+          readinessProbe: {httpGet: {path: /healthz, port: monitor}, periodSeconds: 5}
+          livenessProbe: {httpGet: {path: /healthz, port: monitor}, periodSeconds: 20}
+          resources: {requests: {cpu: 20m, memory: 64Mi}, limits: {memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: data, mountPath: /data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 1Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: nats, namespace: platform-data}
+spec:
+  selector: {app: nats}
+  ports: [{name: client, port: 4222, targetPort: client}]

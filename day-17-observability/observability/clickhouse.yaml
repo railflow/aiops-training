@@ -1,0 +1,48 @@
+# ClickHouse for the observability labs (single node, learning only).
+# Create the password Secret FIRST, on the command line (never commit it):
+#   kubectl -n observability create secret generic clickhouse-credentials --from-literal=password="<generated>"
+apiVersion: v1
+kind: Namespace
+metadata: {name: observability}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: clickhouse, namespace: observability}
+spec:
+  selector: {app: clickhouse}
+  ports:
+    - {name: http, port: 8123, targetPort: 8123}
+    - {name: native, port: 9000, targetPort: 9000}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: clickhouse, namespace: observability}
+spec:
+  serviceName: clickhouse
+  replicas: 1
+  selector: {matchLabels: {app: clickhouse}}
+  template:
+    metadata: {labels: {app: clickhouse}}
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:24.8
+          ports: [{containerPort: 8123}, {containerPort: 9000}]
+          env:
+            - {name: CLICKHOUSE_DB, value: otel}
+            - {name: CLICKHOUSE_USER, value: otel}
+            - {name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT, value: "1"}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: clickhouse-credentials, key: password}}
+          readinessProbe: {httpGet: {path: /ping, port: 8123}, periodSeconds: 5, failureThreshold: 12}
+          livenessProbe: {httpGet: {path: /ping, port: 8123}, initialDelaySeconds: 30, periodSeconds: 20}
+          resources:
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {memory: 1536Mi}
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/clickhouse}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: {requests: {storage: 5Gi}}

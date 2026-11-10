@@ -1,0 +1,77 @@
+# The SAME agent as agent-values.yaml, with the presets replaced by what they generate, so you can see
+# every moving part. Use ONE of the two files, not both (they create the same release name).
+mode: daemonset
+fullnameOverride: otel
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+# What the Downward API gives each pod: which node it runs on. kubeletstats talks to THAT node's kubelet.
+extraEnvs:
+  - name: K8S_NODE_NAME
+    valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+  - name: K8S_NODE_IP
+    valueFrom: {fieldRef: {fieldPath: status.hostIP}}
+
+# What the receiver and processor are allowed to read from the API server and kubelet.
+clusterRole:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["nodes/stats"]
+      verbs: ["get"]
+    - apiGroups: [""]
+      resources: ["pods", "namespaces"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["apps"]
+      resources: ["replicasets"]
+      verbs: ["get", "list", "watch"]
+
+resources:
+  requests: {cpu: 50m, memory: 96Mi}
+  limits: {memory: 256Mi}
+
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+    prometheus: null
+    otlp: null
+    kubeletstats:
+      collection_interval: 20s
+      auth_type: serviceAccount
+      endpoint: ${env:K8S_NODE_IP}:10250
+      insecure_skip_verify: true   # LOCAL ONLY (kind's self-signed kubelet certificate)
+      metric_groups: [node, pod, container]
+  processors:
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    k8sattributes:
+      filter:
+        node_from_env_var: K8S_NODE_NAME
+      extract:
+        metadata: [k8s.namespace.name, k8s.pod.name, k8s.deployment.name, k8s.node.name]
+        labels:
+          - {tag_name: app, key: app, from: pod}
+      pod_association:
+        - sources: [{from: resource_attribute, name: k8s.pod.uid}]
+    resource/cluster:
+      attributes:
+        - {key: k8s.cluster.name, value: ai-ops-training, action: upsert}
+    batch:
+      timeout: 10s
+  exporters:
+    debug:
+      verbosity: basic
+    otlphttp/gateway:
+      endpoint: http://otel-gateway.observability:4318
+  service:
+    pipelines:
+      logs: null
+      traces: null
+      metrics:
+        receivers: [kubeletstats]
+        processors: [memory_limiter, k8sattributes, resource/cluster, batch]
+        exporters: [debug, otlphttp/gateway]

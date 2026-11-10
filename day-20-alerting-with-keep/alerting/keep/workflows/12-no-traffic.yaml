@@ -1,0 +1,63 @@
+# Generated from queries/03-no-traffic-dead-mans-switch.sql. Compare the SQL to keep the two in sync.
+# Pattern: run a query every 60 seconds; if the condition holds create a firing alert, otherwise a
+# resolved alert with the same fingerprint (name + service), so Keep keeps one alert and updates its status.
+workflow:
+  id: alert-no-traffic
+  name: "Alert: dead man's switch, no spans and no logs for 5 minutes"
+  description: "Runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/no-traffic.md"
+  triggers:
+    - type: manual
+    - type: interval
+      value: 60
+  steps:
+    - name: query
+      provider:
+        type: clickhouse
+        config: "{{ providers.clickhouse-otel }}"
+        with:
+          query: |
+            SELECT
+              (SELECT count() FROM otel.otel_traces WHERE Timestamp > now() - INTERVAL 5 MINUTE AND ServiceName = 'shop-frontend') AS spans_5m,
+              (SELECT count() FROM otel.otel_logs   WHERE Timestamp > now() - INTERVAL 5 MINUTE AND ServiceName = 'shop-frontend') AS logs_5m;
+          single_row: "True"
+  actions:
+    - name: fire
+      if: "{{ steps.query.results.spans_5m }} == 0 and {{ steps.query.results.logs_5m }} == 0"
+      provider:
+        type: keep
+        with:
+          override_source_with: clickhouse
+          fingerprint_fields:
+            - name
+            - service
+          alert:
+            name: "No telemetry from shop-frontend"
+            status: firing
+            severity: critical
+            service: shop-frontend
+            description: 'No spans and no logs from shop-frontend in the last 5 minutes. The service is down, idle, or the telemetry pipeline is broken.'
+            labels:
+              service: shop-frontend
+              cluster: ai-ops-training
+              team: shop
+              runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/no-traffic.md
+    - name: resolve
+      if: "{{ steps.query.results.spans_5m }} > 0 or {{ steps.query.results.logs_5m }} > 0"
+      provider:
+        type: keep
+        with:
+          override_source_with: clickhouse
+          fingerprint_fields:
+            - name
+            - service
+          alert:
+            name: "No telemetry from shop-frontend"
+            status: resolved
+            severity: critical
+            service: shop-frontend
+            description: 'Telemetry from shop-frontend is flowing again.'
+            labels:
+              service: shop-frontend
+              cluster: ai-ops-training
+              team: shop
+              runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/no-traffic.md

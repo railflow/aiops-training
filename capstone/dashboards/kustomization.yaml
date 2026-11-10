@@ -1,0 +1,13 @@
+# kubectl apply -k capstone/dashboards     (same sidecar mechanism as day-19-observability-dashboards/dashboards, Day 19)
+namespace: grafana
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+configMapGenerator:
+  - name: dashboard-capstone-portfolio
+    files: [capstone-portfolio.json]
+    options: {annotations: {grafana_folder: "Capstone"}}
+  - name: dashboard-capstone-repo
+    files: [capstone-repo.json]
+    options: {annotations: {grafana_folder: "Capstone"}}

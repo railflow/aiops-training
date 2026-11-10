@@ -1,0 +1,5 @@
+# Offline path (default): only pytest is needed.
+pytest>=8
+# Real runs (optional). Pinned to the versions this page was written and API-checked against, on 2026-11-05.
+modal==1.6.3
+daytona==0.230.0

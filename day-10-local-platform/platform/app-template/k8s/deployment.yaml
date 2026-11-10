@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: __APP__, namespace: __APP__, labels: {app: __APP__}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: __APP__}}
+  template:
+    metadata: {labels: {app: __APP__}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: app
+          image: localhost:30500/__APP__:0.1.0
+          ports: [{name: http, containerPort: 8080}]
+          startupProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 2, failureThreshold: 30}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 10}
+          readinessProbe: {httpGet: {path: /readyz, port: http}, periodSeconds: 5}
+          resources: {requests: {cpu: 20m, memory: 64Mi}, limits: {memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {sizeLimit: 16Mi}}]

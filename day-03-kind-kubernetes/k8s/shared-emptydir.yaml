@@ -1,0 +1,23 @@
+# Two containers in ONE pod share an emptyDir volume.
+# The pod's volume lives exactly as long as the pod.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: shared-emptydir
+spec:
+  volumes:
+    - name: scratch
+      emptyDir: {}
+  containers:
+    - name: writer
+      image: busybox:1.36
+      command: ["sh", "-c", "while true; do date >> /data/log.txt; sleep 5; done"]
+      volumeMounts:
+        - name: scratch
+          mountPath: /data
+    - name: reader
+      image: busybox:1.36
+      command: ["sh", "-c", "touch /data/log.txt; tail -f /data/log.txt"]
+      volumeMounts:
+        - name: scratch
+          mountPath: /data

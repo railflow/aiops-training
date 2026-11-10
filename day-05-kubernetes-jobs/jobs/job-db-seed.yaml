@@ -1,0 +1,33 @@
+# Seeds the database: 5 successful runs in total, at most 2 at a time.
+# Needs the secret from Day 4: kubectl create secret generic db-credentials --from-literal=PGPASSWORD="$DB_PASSWORD"
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-seed
+spec:
+  completions: 5
+  parallelism: 2
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 900
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: hello-py-app:1.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "hello_db.py"]
+          env:
+            - name: NAME
+              value: "seed"
+            - name: PGHOST
+              value: postgres.data
+            - name: PGDATABASE
+              value: app
+            - name: PGUSER
+              value: app
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: PGPASSWORD

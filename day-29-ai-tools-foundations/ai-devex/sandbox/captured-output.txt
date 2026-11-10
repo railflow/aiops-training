@@ -1,0 +1,18 @@
+sandbox/good-job.yaml: no errors
+sandbox/bad-job.yaml: ERROR hostNetwork is true
+sandbox/bad-job.yaml: ERROR automountServiceAccountToken must be false (the agent does not need the cluster API)
+sandbox/bad-job.yaml: ERROR pod securityContext.runAsNonRoot is not true
+sandbox/bad-job.yaml: ERROR volume 'sock' is a hostPath (/var/run/docker.sock): host access
+sandbox/bad-job.yaml: ERROR no activeDeadlineSeconds: a stuck agent runs forever
+sandbox/bad-job.yaml: ERROR container 'agent' is privileged
+sandbox/bad-job.yaml: ERROR container 'agent': allowPrivilegeEscalation must be false
+sandbox/bad-job.yaml: ERROR container 'agent': no cpu limit
+sandbox/bad-job.yaml: ERROR container 'agent': no memory limit
+sandbox/bad-job.yaml: ERROR container 'agent': image 'someorg/agent:latest' is not pinned by digest
+sandbox/bad-job.yaml: ERROR container 'agent' mounts docker.sock: that is root on the node
+sandbox/bad-job.yaml: ERROR container 'agent': env OPENROUTER_API_KEY has a literal value that looks like a secret; use secretKeyRef
+sandbox/bad-job.yaml: ERROR no NetworkPolicy restricting Egress for the sandbox pods
+sandbox/bad-job.yaml: warn  no ttlSecondsAfterFinished: finished Jobs pile up
+sandbox/bad-job.yaml: warn  backoffLimit is not 0: failed agent runs will be retried silently (cost!)
+sandbox/bad-job.yaml: warn  container 'agent': capabilities.drop does not include ALL
+sandbox/bad-job.yaml: warn  container 'agent': root filesystem is writable

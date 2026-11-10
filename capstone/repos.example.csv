@@ -1,0 +1,6 @@
+name,language,domain,owner_team,path
+notifications-py-001,python,notifications,team-a,work/repos/notifications-py-001
+booking-js-002,node,booking,team-b,work/repos/booking-js-002
+scheduler-java-003,java,scheduler,team-c,work/repos/scheduler-java-003
+csv-importer-go-004,go,csv-importer,team-d,work/repos/csv-importer-go-004
+ticketing-cs-005,dotnet,ticketing,team-a,work/repos/ticketing-cs-005

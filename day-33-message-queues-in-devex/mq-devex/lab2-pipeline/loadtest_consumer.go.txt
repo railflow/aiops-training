@@ -1,0 +1,81 @@
+// loadtest_consumer.go: the load-test stage of Lab 2 written in Go, to show that the contract (subject + JSON envelope) is the interface, not the language.
+// NOT COMPILED OR RUN in this repo's verification (Go was not available). Treat it as a starting point and fix what the compiler tells you.
+// Rename to main.go in its own folder, then: go mod init loadtest && go get github.com/nats-io/nats.go@latest && go run .
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"time"
+
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+)
+
+type Event struct {
+	SpecVersion   string         `json:"specversion"`
+	ID            string         `json:"id"`
+	Source        string         `json:"source"`
+	Type          string         `json:"type"`
+	Time          string         `json:"time"`
+	CorrelationID string         `json:"correlationid"`
+	CausationID   string         `json:"causationid"`
+	Data          map[string]any `json:"data"`
+}
+
+func main() {
+	url := os.Getenv("NATS_URL")
+	if url == "" {
+		url = nats.DefaultURL
+	}
+	nc, err := nats.Connect(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	js, _ := jetstream.New(nc)
+	ctx := context.Background()
+	// Same durable name as the Python worker would use: run ONE of them, or they share the work.
+	cons, err := js.CreateOrUpdateConsumer(ctx, "DEVEX", jetstream.ConsumerConfig{
+		Durable: "loadtest-go", FilterSubject: "ci.build.completed", AckPolicy: jetstream.AckExplicitPolicy, MaxDeliver: 4, AckWait: 10 * time.Second,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = cons.Consume(func(m jetstream.Msg) {
+		var in Event
+		if err := json.Unmarshal(m.Data(), &in); err != nil {
+			_ = m.Term() // poison message: do not retry
+			return
+		}
+		p95 := 180
+		out := Event{
+			SpecVersion: "1.0", ID: derive(in.ID, "loadtest"), Source: "worker/loadtest-go", Type: "ci.test.loadtest.completed",
+			Time: time.Now().UTC().Format(time.RFC3339Nano), CorrelationID: in.CorrelationID, CausationID: in.ID,
+			Data: map[string]any{"repo": in.Data["repo"], "sha": in.Data["sha"], "p95_ms": p95, "passed": p95 <= 300},
+		}
+		b, _ := json.Marshal(out)
+		msg := &nats.Msg{Subject: out.Type, Data: b, Header: nats.Header{}}
+		msg.Header.Set("Nats-Msg-Id", out.ID)
+		if _, err := js.PublishMsg(ctx, msg); err != nil {
+			_ = m.NakWithDelay(2 * time.Second)
+			return
+		}
+		_ = m.Ack()
+		fmt.Println("done", in.CorrelationID)
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	select {}
+}
+
+// derive is a simplified stand-in for devbus.derived_id (Python uses uuid5; any stable hash works as long as the same input gives the same id).
+func derive(parent, kind string) string {
+	h := sha256.Sum256([]byte(parent + "|" + kind))
+	return hex.EncodeToString(h[:16])
+}

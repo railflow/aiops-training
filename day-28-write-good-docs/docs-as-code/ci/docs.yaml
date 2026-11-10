@@ -1,0 +1,24 @@
+# Copy to .forgejo/workflows/docs.yaml. On pull requests: the docs gate, a docs build and the link check. On main: also build the image.
+# Not run against a live Forgejo by the author: check runner labels and github.* context support on your version.
+name: docs
+on:
+  pull_request:
+    paths: ["docs/**", "**/*.md", "examples/**", ".forgejo/workflows/docs.yaml"]
+  push:
+    branches: [main]
+    paths: ["docs/**"]
+jobs:
+  docs:
+    runs-on: docker
+    container:
+      image: nexus.platform.svc.cluster.local:5000/builder:1
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Docs gate, build and link check
+        env:
+          DOCS_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || '' }}
+        run: build.sh docs
+      - name: Spelling (cspell)
+        run: npx --yes cspell@8 --no-progress "docs/src/**/*.{md,mdx}"
+        continue-on-error: true          # start advisory; promote to blocking once the dictionary is tuned

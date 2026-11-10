@@ -1,0 +1,62 @@
+# Continuous low-rate synthetic traffic from INSIDE the cluster (Deployment) plus short scheduled bursts (CronJob).
+# The k6 scripts are mounted from a ConfigMap you create from the repository (see the lesson):
+#   kubectl -n loadgen create configmap k6-scripts --from-file=day-18-monitoring-your-kubernetes-cluster/monitoring/k6/loop.js
+# Traffic goes straight to the Service (http://shop-frontend.apps), not through Traefik: it exercises the app,
+# not the ingress. Gatus (Day 21) is what probes through the ingress.
+apiVersion: v1
+kind: Namespace
+metadata: {name: loadgen}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: k6-loop, namespace: loadgen, labels: {app: k6-loop}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: k6-loop}}
+  template:
+    metadata: {labels: {app: k6-loop}}
+    spec:
+      containers:
+        - name: k6
+          image: grafana/k6:latest
+          args: ["run", "--quiet", "/scripts/loop.js"]
+          env:
+            - {name: BASE_URL, value: "http://shop-frontend.apps"}
+            - {name: RATE, value: "3"}
+            - {name: DURATION, value: "720h"}
+          volumeMounts: [{name: scripts, mountPath: /scripts}]
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {memory: 256Mi}
+      volumes:
+        - name: scripts
+          configMap: {name: k6-scripts}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: k6-burst, namespace: loadgen}
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: k6
+              image: grafana/k6:latest
+              args: ["run", "--quiet", "/scripts/loop.js"]
+              env:
+                - {name: BASE_URL, value: "http://shop-frontend.apps"}
+                - {name: RATE, value: "15"}
+                - {name: DURATION, value: "2m"}
+              volumeMounts: [{name: scripts, mountPath: /scripts}]
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {memory: 256Mi}
+          volumes:
+            - name: scripts
+              configMap: {name: k6-scripts}

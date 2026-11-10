@@ -1,0 +1,34 @@
+# The Temporal worker: runs the capstone workflows and activities. Needs kubectl in the image (the Dockerfile in ../workflows adds it).
+# Secrets are created out of band (never in git):
+#   kubectl -n capstone create secret generic worker-secrets --from-literal=CLICKHOUSE_PASSWORD=... --from-literal=FORGEJO_ADMIN_TOKEN=... \
+#     --from-literal=ANTHROPIC_API_KEY=...      # or the gateway key; with OpenBao + External Secrets (Day 16) these come from the vault instead
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: capstone-worker, namespace: capstone, labels: {app: capstone-worker}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: capstone-worker}}
+  template:
+    metadata: {labels: {app: capstone-worker}}
+    spec:
+      serviceAccountName: capstone-worker
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: worker
+          image: capstone-worker:1
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: TEMPORAL_ADDRESS, value: "temporal-frontend.temporal.svc.cluster.local:7233"}
+            - {name: TASK_QUEUE, value: "capstone"}
+            - {name: JOB_RUNNER, value: "kubernetes"}
+            - {name: NAMESPACE, value: "capstone"}
+            - {name: FORGEJO_URL, value: "http://forgejo.platform.svc.cluster.local:3000"}
+            - {name: CLICKHOUSE_URL, value: "http://clickhouse.observability.svc.cluster.local:8123"}
+            - {name: CLICKHOUSE_USER, value: "capstone"}
+            - {name: AGENT_IMAGE, value: "nexus.platform.svc.cluster.local:5000/capstone-agent:1"}
+            - {name: EVAL_IMAGE, value: "nexus.platform.svc.cluster.local:5000/measure:1"}
+          envFrom: [{secretRef: {name: worker-secrets}}]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+          resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 500m, memory: 384Mi}}
+      volumes: [{name: tmp, emptyDir: {}}]

@@ -1,0 +1,75 @@
+# Generated from queries/07-memory-over-90-percent-of-limit.sql. Compare the SQL to keep the two in sync.
+# Pattern: run a query every 60 seconds; if the condition holds create a firing alert, otherwise a
+# resolved alert with the same fingerprint (name + service), so Keep keeps one alert and updates its status.
+workflow:
+  id: alert-memory-near-limit
+  name: "Alert: memory above 90% of limit"
+  description: "Runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/oomkilled.md"
+  triggers:
+    - type: manual
+    - type: interval
+      value: 60
+  steps:
+    - name: query
+      provider:
+        type: clickhouse
+        config: "{{ providers.clickhouse-otel }}"
+        with:
+          query: |
+            SELECT count() AS pods_hot,
+                   arrayStringConcat(groupArray(concat(pod, ' ', toString(pct), '%')), ', ') AS detail
+            FROM (
+              SELECT m.pod AS pod, round(100 * m.mem / l.lim, 1) AS pct
+              FROM (SELECT ResourceAttributes['k8s.pod.name'] AS pod, argMax(Value, TimeUnix) AS mem
+                    FROM otel.otel_metrics_gauge
+                    WHERE MetricName = 'k8s.pod.memory.working_set' AND TimeUnix > now() - INTERVAL 3 MINUTE
+                      AND ResourceAttributes['k8s.namespace.name'] = 'apps'
+                    GROUP BY pod) AS m
+              INNER JOIN (SELECT ResourceAttributes['k8s.pod.name'] AS pod, sum(Value) AS lim
+                          FROM otel.otel_metrics_gauge
+                          WHERE MetricName = 'k8s.container.memory_limit' AND TimeUnix > now() - INTERVAL 3 MINUTE
+                          GROUP BY pod) AS l ON m.pod = l.pod
+              WHERE l.lim > 0 AND m.mem / l.lim > 0.90
+            );
+          single_row: "True"
+  actions:
+    - name: fire
+      if: "{{ steps.query.results.pods_hot }} > 0"
+      provider:
+        type: keep
+        with:
+          override_source_with: clickhouse
+          fingerprint_fields:
+            - name
+            - service
+          alert:
+            name: "Pod memory above 90% of its limit"
+            status: firing
+            severity: warning
+            service: apps
+            description: 'Pods above 90% of memory limit: {{ steps.query.results.detail }}'
+            labels:
+              service: apps
+              cluster: ai-ops-training
+              team: shop
+              runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/oomkilled.md
+    - name: resolve
+      if: "{{ steps.query.results.pods_hot }} == 0"
+      provider:
+        type: keep
+        with:
+          override_source_with: clickhouse
+          fingerprint_fields:
+            - name
+            - service
+          alert:
+            name: "Pod memory above 90% of its limit"
+            status: resolved
+            severity: warning
+            service: apps
+            description: 'No pod above 90% of its memory limit.'
+            labels:
+              service: apps
+              cluster: ai-ops-training
+              team: shop
+              runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/oomkilled.md

@@ -1,0 +1,26 @@
+# (b) The same path routing as ingress-paths.yaml, as a Traefik IngressRoute with middlewares.
+# Apply this INSTEAD of ingress-paths.yaml (both would claim apps.localhost/py and /go).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: hello-paths-crd
+  namespace: apps
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`apps.localhost`) && PathPrefix(`/py`)
+      kind: Rule
+      middlewares:
+        - name: strip-prefixes
+        - name: response-headers
+      services:
+        - name: hello-py
+          port: 80
+    - match: Host(`apps.localhost`) && PathPrefix(`/go`)
+      kind: Rule
+      middlewares:
+        - name: strip-prefixes
+        - name: rate-limit
+      services:
+        - name: hello-go
+          port: 80

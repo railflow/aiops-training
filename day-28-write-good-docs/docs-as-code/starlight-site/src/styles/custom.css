@@ -1,0 +1,246 @@
+/* Accent colours for the course site. Starlight derives most of the theme from these. */
+:root {
+  --sl-color-accent-low: #cfe8ff;
+  --sl-color-accent: #0a6cc4;
+  --sl-color-accent-high: #064a87;
+}
+
+:root[data-theme='dark'] {
+  --sl-color-accent-low: #0b2a47;
+  --sl-color-accent: #3b9bf0;
+  --sl-color-accent-high: #a9d3fb;
+}
+
+/* Keep wide tables readable instead of squashing columns. */
+.sl-markdown-content table {
+  display: block;
+  overflow-x: auto;
+}
+
+/* astro-mermaid renders into <pre class="mermaid">; centre the diagrams. */
+pre.mermaid {
+  display: flex;
+  justify-content: center;
+  background: transparent;
+  border: none;
+}
+
+/* Landing-page cards: equal heights in a plain grid, and borders that stay visible in both themes. */
+.card-grid > .card,
+.card-grid > .sl-link-card {
+  height: 100%;
+}
+.card-grid > .card {
+  border-color: var(--sl-color-gray-4);
+}
+
+/* Header: no title strip. The logo (home link) replaces the title text; search, GitHub and the theme picker stay. */
+:root,
+:root[data-theme='dark'] {
+  --sl-color-bg-nav: var(--sl-color-bg);
+  --sl-nav-height: 3rem;
+}
+header.header {
+  border-bottom-color: var(--sl-color-hairline);
+}
+.site-title img {
+  height: 1.75rem;
+  width: 1.75rem;
+}
+
+/* Starlight hides the theme picker below 50rem (it lives in the menu). Keep it in the header on phones too. */
+@media (max-width: 49.99rem) {
+  .header .right-group.sl-hidden {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .header .right-group .social-icons {
+    display: none;
+  }
+}
+
+/* Landing page: compact hero, tighter gaps, cards that start higher. */
+:root[data-has-hero] .hero {
+  padding-block: clamp(0.5rem, 3vmin, 1.5rem) 0.5rem;
+  gap: 1rem;
+}
+:root[data-has-hero] .hero .stack {
+  gap: 1rem;
+}
+:root[data-has-hero] .hero .copy {
+  gap: 0.75rem;
+}
+:root[data-has-hero] .hero h1 {
+  font-size: clamp(2rem, calc(1rem + 2.2vw), 2.75rem);
+  line-height: 1.15;
+}
+:root[data-has-hero] .hero .tagline {
+  font-size: clamp(1rem, calc(0.75rem + 0.6vw), 1.2rem);
+  line-height: 1.5;
+}
+:root[data-has-hero] .hero .actions {
+  gap: 0.5rem 1rem;
+}
+:root[data-has-hero] .hero .actions a {
+  padding: 0.5rem 1.1rem;
+}
+:root[data-has-hero] .content-panel {
+  padding-block: 0.75rem;
+}
+:root[data-has-hero] .sl-markdown-content h2 {
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  font-size: var(--sl-text-h3);
+}
+:root[data-has-hero] .card-grid {
+  gap: 0.75rem;
+}
+:root[data-has-hero] .card-grid > .card {
+  padding: 0.85rem 1.1rem;
+  gap: 0.4rem;
+}
+:root[data-has-hero] .card-grid > .sl-link-card {
+  padding: 0.75rem 1rem;
+}
+@media (max-width: 30rem) {
+  :root[data-has-hero] .hero h1 {
+    font-size: 1.75rem;
+  }
+}
+
+/* Course roadmap: numbered step cards that wrap into rows (4 across on desktop, 2 on phones). */
+.roadmap {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+  gap: 0.75rem;
+}
+.sl-markdown-content .roadmap li {
+  margin: 0;
+}
+.roadmap a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  height: 100%;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 0.5rem;
+  background: var(--sl-color-bg-nav);
+  color: var(--sl-color-white);
+  text-decoration: none;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+.roadmap a:hover,
+.roadmap a:focus-visible {
+  border-color: var(--sl-color-accent);
+  background: var(--sl-color-accent-low);
+}
+.roadmap-wk {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--sl-color-accent-high);
+}
+.roadmap-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+@media (max-width: 30rem) {
+  .roadmap {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Click-to-zoom for diagrams (public/diagram-zoom.js). */
+.dz-zoomable {
+  cursor: zoom-in;
+  border-radius: 0.375rem;
+}
+.dz-zoomable:hover {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+.dz-zoomable:focus-visible {
+  outline: 3px solid var(--sl-color-accent);
+  outline-offset: 3px;
+}
+html.dz-lock {
+  overflow: hidden;
+}
+.dz-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  background: rgb(0 0 0 / 0.86);
+  backdrop-filter: blur(2px);
+}
+.dz-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  min-height: 3.5rem;
+}
+.dz-level {
+  min-width: 3.5rem;
+  text-align: center;
+  color: #fff;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.dz-btn {
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--sl-color-gray-4);
+  border-radius: 999px;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-white);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.dz-btn:hover {
+  border-color: var(--sl-color-accent);
+}
+.dz-btn:focus-visible {
+  outline: 3px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+.dz-close {
+  margin-inline-start: 0.5rem;
+}
+.dz-stage {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.dz-stage.dz-grabbing {
+  cursor: grabbing;
+}
+.dz-content {
+  transform-origin: center center;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  will-change: transform;
+}
+.dz-content svg,
+.dz-content img {
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}

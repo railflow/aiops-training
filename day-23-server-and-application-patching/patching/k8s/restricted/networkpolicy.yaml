@@ -1,0 +1,20 @@
+# Default deny for everything in the namespace, then one explicit allow: traffic from the Traefik namespace to the app.
+# ENFORCEMENT NEEDS A CNI THAT IMPLEMENTS NetworkPolicy. kind's default (kindnet) may not: use the Calico setup from Day 6
+# (day-03-kind-kubernetes/k8s/kind-config-calico.yaml) or this policy is a comment that the cluster ignores.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny-all, namespace: hardened}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-from-traefik, namespace: hardened}
+spec:
+  podSelector: {matchLabels: {app: demo-restricted}}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}
+      ports: [{port: 8080}]

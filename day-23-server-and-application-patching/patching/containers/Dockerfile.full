@@ -1,0 +1,8 @@
+# Build context: ../app   docker build -f ../containers/Dockerfile.full -t patch-demo:full .
+# The convenient default: a full Debian-based image with compilers and many packages you do not need.
+FROM python:3.12
+WORKDIR /app
+COPY requirements.fixed.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+CMD ["python", "app.py"]

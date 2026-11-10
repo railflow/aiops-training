@@ -1,0 +1,5 @@
+FROM maven:3.9-eclipse-temurin-21
+WORKDIR /src
+COPY . .
+RUN mvn -B -q dependency:copy-dependencies -DoutputDirectory=target/lib && mvn -B -q compile
+CMD ["java", "-cp", "target/classes:target/lib/*", "hello.Main"]

@@ -1,0 +1,60 @@
+# Local notification sinks so you can see exactly what Keep would send, with no external accounts.
+#   mailpit    catches email (SMTP :1025), web UI at http://mail.localhost:8080
+#   echo-sink  accepts any HTTP request and prints it as JSON in its logs: kubectl -n keep logs deploy/echo-sink
+# Images are pinned to tags that existed on Docker Hub when this was written; check for newer ones.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: mailpit, namespace: keep}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: mailpit}}
+  template:
+    metadata: {labels: {app: mailpit}}
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.33.0
+          ports: [{name: smtp, containerPort: 1025}, {name: http, containerPort: 8025}]
+          resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 128Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: mailpit, namespace: keep}
+spec:
+  selector: {app: mailpit}
+  ports: [{name: smtp, port: 1025, targetPort: smtp}, {name: http, port: 8025, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mailpit
+  namespace: keep
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: mail.localhost
+      http:
+        paths:
+          - {path: /, pathType: Prefix, backend: {service: {name: mailpit, port: {name: http}}}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: echo-sink, namespace: keep}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: echo-sink}}
+  template:
+    metadata: {labels: {app: echo-sink}}
+    spec:
+      containers:
+        - name: echo
+          image: mendhak/http-https-echo:43
+          ports: [{name: http, containerPort: 8080}]
+          resources: {requests: {cpu: 10m, memory: 48Mi}, limits: {memory: 128Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: echo-sink, namespace: keep}
+spec:
+  selector: {app: echo-sink}
+  ports: [{name: http, port: 80, targetPort: http}]

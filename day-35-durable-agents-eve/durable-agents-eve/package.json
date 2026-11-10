@@ -1,0 +1,15 @@
+{
+  "name": "durable-agents-eve-lab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "install:eve": "npm install --prefix eve-app",
+    "build": "npm run build --prefix eve-app",
+    "test": "node --test tests/*.test.ts",
+    "lab": "node lab/crash-lab.mjs all",
+    "lab:plain": "node lab/crash-lab.mjs plain",
+    "lab:eve": "node lab/crash-lab.mjs eve-parked eve-step-crash eve-pr-crash eve-sleep eve-fanout"
+  }
+}

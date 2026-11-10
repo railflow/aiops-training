@@ -1,0 +1,20 @@
+# NOT included in kustomization.yaml: it needs a real Slack account. To use it:
+#   1. In Slack, create an app with an incoming webhook (api.slack.com/messaging/webhooks) and copy the URL.
+#   2. In Keep, Providers > Slack > paste the webhook URL (stored by Keep in a Kubernetes Secret). Name the provider "slack".
+#   3. Copy this file into keep/workflows/, add it to kustomization.yaml, apply, restart keep-backend.
+# Never put the webhook URL in git.
+workflow:
+  id: notify-slack
+  name: "Post critical alerts to Slack"
+  triggers:
+    - type: alert
+      cel: severity == "critical"
+      only_on_change:
+        - status
+  actions:
+    - name: slack-message
+      provider:
+        type: slack
+        config: "{{ providers.slack }}"
+        with:
+          message: "[{{ alert.status }}] {{ alert.severity }}: {{ alert.name }} - {{ alert.description }} Runbook: {{ alert.labels.runbook }}"

@@ -1,0 +1,78 @@
+# Grafana on kind with EVERYTHING provisioned as code: the plugin, the datasource, the dashboards.
+# Chart: grafana-community/grafana. The older grafana/grafana chart is marked deprecated (its README says it is
+# moving to https://github.com/grafana-community/helm-charts), so we use the new repository:
+#   helm repo add grafana-community https://grafana-community.github.io/helm-charts
+#   helm show values grafana-community/grafana --version 14.3.1 | less
+# Secrets are NOT in this file. Create them on the command line first (see the lesson):
+#   grafana-admin       keys admin-user, admin-password
+#   grafana-clickhouse  key  CLICKHOUSE_PASSWORD   (the password of the ClickHouse user "otel")
+fullnameOverride: grafana
+replicas: 1
+
+admin:
+  existingSecret: grafana-admin
+  userKey: admin-user
+  passwordKey: admin-password
+
+# Exposes CLICKHOUSE_PASSWORD to Grafana's environment; the datasource file below refers to it as $CLICKHOUSE_PASSWORD.
+envFromSecret: grafana-clickhouse
+
+# Downloaded from grafana.com when the pod starts (needs internet). The chart's values file documents the
+# pinned form: name@version@download-url. Check the plugin page for the release that matches your Grafana.
+plugins:
+  - grafana-clickhouse-datasource
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: ClickHouse
+        uid: clickhouse
+        type: grafana-clickhouse-datasource
+        isDefault: true
+        editable: false
+        jsonData:
+          host: clickhouse.observability
+          port: 9000
+          protocol: native
+          secure: false
+          username: otel
+          defaultDatabase: otel
+        secureJsonData:
+          password: $CLICKHOUSE_PASSWORD
+
+# Dashboards come from ConfigMaps labelled grafana_dashboard=1 (see kustomization.yaml). The sidecar watches
+# them; folderAnnotation + foldersFromFilesStructure puts each one in the folder named by its annotation.
+sidecar:
+  dashboards:
+    enabled: true
+    label: grafana_dashboard
+    labelValue: "1"
+    folderAnnotation: grafana_folder
+    searchNamespace: grafana
+    provider:
+      foldersFromFilesStructure: true
+      allowUiUpdates: false
+      disableDelete: false
+
+# No persistence on purpose: delete the pod and everything comes back from this repository.
+persistence:
+  enabled: false
+
+resources:
+  requests: {cpu: 50m, memory: 192Mi}
+  limits: {memory: 512Mi}
+
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  hosts:
+    - grafana.localhost
+  path: /
+
+grafana.ini:
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+  users:
+    default_theme: light

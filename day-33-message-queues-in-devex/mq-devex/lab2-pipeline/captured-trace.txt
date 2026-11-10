@@ -1,0 +1,17 @@
+# Captured live 2026-11-05: nats-server 2.11.17, Python 3.12, all six workers as separate processes, one 'emit_build.py' run.
+# Columns: time, worker that handled the event, event type, events that worker published in response.
+12:42:00.052 audit-sink ci.build.completed           []
+12:42:00.052 notify     ci.build.completed           []
+12:42:00.262 uitest     ci.build.completed           ['ci.test.uitest.completed']
+12:42:00.263 notify     ci.test.uitest.completed     []
+12:42:00.264 audit-sink ci.test.uitest.completed     []
+12:42:00.265 gate       ci.test.uitest.completed     []
+12:42:00.356 loadtest   ci.build.completed           ['ci.test.loadtest.completed']
+12:42:00.356 notify     ci.test.loadtest.completed   []
+12:42:00.361 audit-sink ci.test.loadtest.completed   []
+12:42:01.037 gate       ci.test.loadtest.completed   ['ci.gate.passed']
+12:42:01.037 notify     ci.gate.passed               []
+12:42:01.044 audit-sink ci.gate.passed               []
+12:42:01.047 deploy     ci.gate.passed               ['ci.deploy.completed']
+12:42:01.048 notify     ci.deploy.completed          []
+12:42:01.049 audit-sink ci.deploy.completed          []

@@ -1,0 +1,19 @@
+# When Keep opens an incident (from a correlation rule, see the lesson), post one message per incident
+# to the webhook sink. The trigger field is "events" (the Keep code reads "events"; one doc page says "on": check the docs).
+workflow:
+  id: incident-opened
+  name: "Announce new incidents"
+  triggers:
+    - type: incident
+      events:
+        - created
+  actions:
+    - name: announce
+      provider:
+        type: webhook
+        config: "{{ providers.echo-sink }}"
+        with:
+          body:
+            event: "incident-created"
+            incident: "{{ incident.user_generated_name }}"
+            severity: "{{ incident.severity }}"

@@ -1,0 +1,40 @@
+# Cluster config for the course. Create it with the kind CLI (see day03):
+#   sed "s|__SHARED_DIR__|$HOME/kind-shared|" day-03-kind-kubernetes/k8s/kind-config.yaml > /tmp/kind-config.yaml
+#   kind create cluster --config /tmp/kind-config.yaml
+# The name matches the one ./tools/kind uses, so ./tools/kind start/stop/destroy keep working.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ai-ops-training
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # Ingress controller (Day 7). Host ports 8080/8443 avoid clashing with Appwrite on 80/443.
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP
+      # NodePorts we use as stable front doors from your laptop.
+      - containerPort: 30090   # demo apps (Days 3-6)
+        hostPort: 30090
+        protocol: TCP
+      - containerPort: 30500   # artifact registry docker connector (Day 10)
+        hostPort: 30500
+        protocol: TCP
+      - containerPort: 30300   # Forgejo web UI (Day 10)
+        hostPort: 30300
+        protocol: TCP
+      - containerPort: 30081   # Nexus web UI (Day 10)
+        hostPort: 30081
+        protocol: TCP
+    extraMounts:
+      # A folder on your machine that appears at /shared inside the kind node.
+      - hostPath: __SHARED_DIR__
+        containerPath: /shared

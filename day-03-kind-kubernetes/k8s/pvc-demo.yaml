@@ -1,0 +1,29 @@
+# A PersistentVolumeClaim asks the cluster for storage. kind ships a default
+# StorageClass ("standard", rancher local-path) that creates the volume on demand.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 100Mi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pvc-writer
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: data
+      persistentVolumeClaim:
+        claimName: demo-data
+  containers:
+    - name: writer
+      image: busybox:1.36
+      command: ["sh", "-c", "date >> /data/runs.txt; cat /data/runs.txt"]
+      volumeMounts:
+        - name: data
+          mountPath: /data

@@ -1,0 +1,20 @@
+# /shared inside the kind node is the folder you mounted via extraMounts in
+# kind-config.yaml, which is a folder on your own machine.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: shared-hostpath
+spec:
+  restartPolicy: Never
+  volumes:
+    - name: host-shared
+      hostPath:
+        path: /shared
+        type: Directory
+  containers:
+    - name: writer
+      image: busybox:1.36
+      command: ["sh", "-c", "echo hello from pod $(hostname) > /data/from-pod.txt; ls -l /data"]
+      volumeMounts:
+        - name: host-shared
+          mountPath: /data

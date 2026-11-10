@@ -1,0 +1,14 @@
+# The "before": defaults everywhere. Under the restricted profile this pod is REJECTED (see the Deployment's events).
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: demo-root, namespace: hardened}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: demo-root}}
+  template:
+    metadata: {labels: {app: demo-root}}
+    spec:
+      containers:
+        - name: app
+          image: localhost:30500/patch-demo:base-slim
+          ports: [{containerPort: 8080}]

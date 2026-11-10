@@ -1,0 +1,24 @@
+# Alerts as code: every file in workflows/ becomes a key in the ConfigMap keep-workflow-files,
+# which values-keep.yaml mounts at /workflows. Keep reads that directory at start-up
+# (KEEP_WORKFLOWS_DIRECTORY) and adds, updates or removes workflows to match the files.
+#   kubectl apply -k day-20-alerting-with-keep/alerting/keep
+#   kubectl -n keep rollout restart deploy/keep-backend
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: keep
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+  - name: keep-workflow-files
+    files:
+      - workflows/10-error-rate.yaml
+      - workflows/11-p95-latency.yaml
+      - workflows/12-no-traffic.yaml
+      - workflows/13-pod-restarts.yaml
+      - workflows/14-oom-suspects.yaml
+      - workflows/15-replicas-unavailable.yaml
+      - workflows/16-memory-near-limit.yaml
+      - workflows/17-synthetic-traffic.yaml
+      - workflows/20-notify-critical.yaml
+      - workflows/30-escalate-unacknowledged.yaml
+      - workflows/40-incident-opened.yaml

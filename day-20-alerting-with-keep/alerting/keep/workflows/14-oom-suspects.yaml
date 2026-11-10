@@ -1,0 +1,77 @@
+# Generated from queries/05-oom-suspects-10m.sql. Compare the SQL to keep the two in sync.
+# Pattern: run a query every 60 seconds; if the condition holds create a firing alert, otherwise a
+# resolved alert with the same fingerprint (name + service), so Keep keeps one alert and updates its status.
+workflow:
+  id: alert-oom-suspects
+  name: "Alert: restart plus memory above 85% of limit (OOMKill proxy)"
+  description: "Runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/oomkilled.md"
+  triggers:
+    - type: manual
+    - type: interval
+      value: 60
+  steps:
+    - name: query
+      provider:
+        type: clickhouse
+        config: "{{ providers.clickhouse-otel }}"
+        with:
+          query: |
+            SELECT count() AS suspects, arrayStringConcat(groupArray(pod), ', ') AS pods
+            FROM (
+              SELECT r.pod AS pod
+              FROM (SELECT ResourceAttributes['k8s.pod.name'] AS pod, max(Value) - min(Value) AS restarts
+                    FROM otel.otel_metrics_gauge
+                    WHERE MetricName = 'k8s.container.restarts' AND TimeUnix > now() - INTERVAL 10 MINUTE
+                    GROUP BY pod HAVING restarts > 0) AS r
+              INNER JOIN (SELECT ResourceAttributes['k8s.pod.name'] AS pod, max(Value) AS mem
+                          FROM otel.otel_metrics_gauge
+                          WHERE MetricName = 'k8s.pod.memory.working_set' AND TimeUnix > now() - INTERVAL 15 MINUTE
+                          GROUP BY pod) AS m ON r.pod = m.pod
+              INNER JOIN (SELECT ResourceAttributes['k8s.pod.name'] AS pod, sum(Value) AS lim
+                          FROM otel.otel_metrics_gauge
+                          WHERE MetricName = 'k8s.container.memory_limit' AND TimeUnix > now() - INTERVAL 15 MINUTE
+                          GROUP BY pod) AS l ON r.pod = l.pod
+              WHERE l.lim > 0 AND m.mem / l.lim > 0.85
+            );
+          single_row: "True"
+  actions:
+    - name: fire
+      if: "{{ steps.query.results.suspects }} > 0"
+      provider:
+        type: keep
+        with:
+          override_source_with: clickhouse
+          fingerprint_fields:
+            - name
+            - service
+          alert:
+            name: "Probable OOMKill in namespace apps"
+            status: firing
+            severity: high
+            service: apps
+            description: 'Pods restarted after running near their memory limit: {{ steps.query.results.pods }}. Confirm with kubectl describe pod (Last State: OOMKilled).'
+            labels:
+              service: apps
+              cluster: ai-ops-training
+              team: shop
+              runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/oomkilled.md
+    - name: resolve
+      if: "{{ steps.query.results.suspects }} == 0"
+      provider:
+        type: keep
+        with:
+          override_source_with: clickhouse
+          fingerprint_fields:
+            - name
+            - service
+          alert:
+            name: "Probable OOMKill in namespace apps"
+            status: resolved
+            severity: high
+            service: apps
+            description: 'No restart-near-memory-limit pattern in the last 10 minutes.'
+            labels:
+              service: apps
+              cluster: ai-ops-training
+              team: shop
+              runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/oomkilled.md

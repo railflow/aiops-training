@@ -1,0 +1,73 @@
+# Generated from queries/06-replicas-unavailable.sql. Compare the SQL to keep the two in sync.
+# Pattern: run a query every 60 seconds; if the condition holds create a firing alert, otherwise a
+# resolved alert with the same fingerprint (name + service), so Keep keeps one alert and updates its status.
+workflow:
+  id: alert-replicas-unavailable
+  name: "Alert: available replicas below desired"
+  description: "Runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/replicas-unavailable.md"
+  triggers:
+    - type: manual
+    - type: interval
+      value: 60
+  steps:
+    - name: query
+      provider:
+        type: clickhouse
+        config: "{{ providers.clickhouse-otel }}"
+        with:
+          query: |
+            SELECT count() AS deployments_short,
+                   arrayStringConcat(groupArray(concat(deployment, ' ', toString(available), '/', toString(desired))), ', ') AS detail
+            FROM (
+              SELECT ResourceAttributes['k8s.deployment.name'] AS deployment,
+                     argMaxIf(Value, TimeUnix, MetricName = 'k8s.deployment.desired') AS desired,
+                     argMaxIf(Value, TimeUnix, MetricName = 'k8s.deployment.available') AS available
+              FROM otel.otel_metrics_gauge
+              WHERE MetricName IN ('k8s.deployment.desired', 'k8s.deployment.available')
+                AND ResourceAttributes['k8s.namespace.name'] = 'apps'
+                AND TimeUnix > now() - INTERVAL 3 MINUTE
+              GROUP BY deployment
+              HAVING available < desired
+            );
+          single_row: "True"
+  actions:
+    - name: fire
+      if: "{{ steps.query.results.deployments_short }} > 0"
+      provider:
+        type: keep
+        with:
+          override_source_with: clickhouse
+          fingerprint_fields:
+            - name
+            - service
+          alert:
+            name: "Deployment has fewer replicas than desired"
+            status: firing
+            severity: high
+            service: apps
+            description: 'Available/desired replicas: {{ steps.query.results.detail }}'
+            labels:
+              service: apps
+              cluster: ai-ops-training
+              team: shop
+              runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/replicas-unavailable.md
+    - name: resolve
+      if: "{{ steps.query.results.deployments_short }} == 0"
+      provider:
+        type: keep
+        with:
+          override_source_with: clickhouse
+          fingerprint_fields:
+            - name
+            - service
+          alert:
+            name: "Deployment has fewer replicas than desired"
+            status: resolved
+            severity: high
+            service: apps
+            description: 'All Deployments in apps have their desired replicas available.'
+            labels:
+              service: apps
+              cluster: ai-ops-training
+              team: shop
+              runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/replicas-unavailable.md

@@ -1,0 +1,68 @@
+# CI verifies and packages, then FIRES the long-running workflow and exits. It never waits for the workflow.
+# Lives in the repo that owns the batch code, at .forgejo/workflows/dispatch.yaml  (Forgejo also reads .github/workflows/).
+# NOT RUN against a live Forgejo by the author of this course page: check every line against your runner config.
+name: ci-and-dispatch
+on:
+  push:
+    branches: [main]
+    paths:
+      - "python/**"          # a path filter keeps unrelated pushes from starting a batch
+      - "k8s/**"
+      - ".forgejo/workflows/dispatch.yaml"
+
+env:
+  REGISTRY: nexus.platform.svc.cluster.local:5000      # the same Nexus as localhost:30500 on your laptop, as seen from inside the cluster
+  IMAGE: tax-worker
+  TEMPORAL_CLI_VERSION: "1.10.0"                       # keep in sync with tools/versions.env
+  TEMPORAL_CLI_SHA256_LINUX_ARM64: "6e526d2f089bf5acead2129f1f63e303b848410d5d9d86b9255359dcea6eaaa8"
+  TEMPORAL_CLI_SHA256_LINUX_AMD64: "521f461f3d108902763bb71e85cd0fd382dc9357b59604ae03da6ae734d16890"
+  # In-cluster runner: use the Service DNS name. A runner on your laptop outside the cluster needs a port-forward address instead.
+  TEMPORAL_ADDRESS: temporal-frontend.temporal.svc.cluster.local:7233
+  TEMPORAL_NAMESPACE: enterprise
+
+jobs:
+  verify-and-build:
+    runs-on: docker                                     # must match a label your runner registered with (Day 10): compare in Forgejo's admin > Actions > Runners
+    container:
+      image: nexus.platform.svc.cluster.local:5000/builder:1
+    env:
+      REGISTRY: nexus.platform.svc.cluster.local:5000
+      BUILDKIT_HOST: tcp://buildkitd.platform.svc.cluster.local:1234
+      TAG: ${{ github.sha }}
+      PUSH: "true"
+    steps:
+      # actions/checkout comes from Forgejo's action mirror (data.forgejo.org) or your own mirror, depending on the runner's configuration.
+      # Pin to a tag your runner can fetch; check your runner config (DEFAULT_ACTIONS_URL in Forgejo's app.ini).
+      - uses: actions/checkout@v4
+      - name: Test, scan, build, push (fast, synchronous, the ONLY thing that gates the build)
+        run: build.sh build test secure
+
+  dispatch:
+    needs: verify-and-build                             # only dispatch what was verified
+    runs-on: docker
+    container:
+      image: nexus.platform.svc.cluster.local:5000/builder:1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the pinned Temporal CLI (checksum verified)
+        run: |
+          arch="$(uname -m)"; case "$arch" in aarch64|arm64) a=arm64; sum="$TEMPORAL_CLI_SHA256_LINUX_ARM64";; x86_64) a=amd64; sum="$TEMPORAL_CLI_SHA256_LINUX_AMD64";; esac
+          f="temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${a}.tar.gz"
+          curl -fsSL -o "$f" "https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/$f"
+          echo "$sum  $f" | sha256sum -c -
+          tar -xzf "$f" temporal && install -m 0755 temporal /usr/local/bin/temporal
+          temporal --version
+      - name: Start the workflow and exit (fire and forget)
+        env:
+          TEMPORAL_API_KEY: ${{ secrets.TEMPORAL_API_KEY }}      # only for Temporal Cloud; leave unset for self-hosted. Never echo it.
+        run: |
+          batch="BATCH-$(date -u +%Y-%m)"
+          # The CLI reads TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE and TEMPORAL_API_KEY from the environment (check `temporal --help` for your version).
+          # Deterministic id + UseExisting: a re-run of this job attaches to the batch already running instead of starting a second one.
+          temporal workflow start \
+            --task-queue enterprise-batch-queue \
+            --type MonthlyTaxProcessingWorkflow \
+            --workflow-id "monthly-tax-${batch}" \
+            --id-conflict-policy UseExisting \
+            --input "{\"batch_id\": \"${batch}\"}"
+          echo "dispatched monthly-tax-${batch}; this job ends here and does not wait"

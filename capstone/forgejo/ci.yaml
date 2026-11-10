@@ -1,0 +1,33 @@
+# Golden-path workflow added to every capstone repo as .forgejo/workflows/ci.yaml by push_repos.py / push_repos.sh.
+# All logic lives in build.sh and the measure image (capstone/measure/Dockerfile).
+# `build.sh secure` is expected to FAIL on these repos (fake secrets, vulnerable pins): that is the point. continue-on-error keeps measure running.
+name: ci
+on: [push, pull_request]
+jobs:
+  ci:
+    runs-on: docker
+    container:
+      image: nexus.platform.svc.cluster.local:5000/measure:1
+    env:
+      REPORT_DIR: reports
+      RUN_ID: ${{ github.run_id }}
+      REPO_NAME: ${{ github.event.repository.name }}
+      CLICKHOUSE_URL: http://clickhouse.observability.svc.cluster.local:8123
+      CLICKHOUSE_USER: capstone
+      CLICKHOUSE_PASSWORD: ${{ secrets.CLICKHOUSE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tests and coverage
+        run: build.sh test
+      - name: Security scan (reported, not blocking in the baseline)
+        run: build.sh secure
+        continue-on-error: true
+      - name: Measure and ship to ClickHouse
+        run: MEASURE_SHIP=1 build.sh measure
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: reports
+          path: reports/

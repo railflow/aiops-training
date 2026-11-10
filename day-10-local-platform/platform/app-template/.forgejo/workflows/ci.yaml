@@ -1,0 +1,26 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test
+        run: |
+          python3 -m venv .venv && . .venv/bin/activate
+          pip install -r requirements.txt pytest
+          pytest -q
+  docs:
+    # Runs on pull requests: code changes need docs, or a "Docs: n/a <reason>" commit trailer (Day 28).
+    if: github.event_name == 'pull_request'
+    runs-on: docker
+    container:
+      image: nexus.platform.svc.cluster.local:5000/builder:1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # the gate diffs against the base branch, so it needs history
+      - name: Docs gate
+        env:
+          DOCS_BASE: origin/${{ github.base_ref }}      # check your Forgejo version supports github.base_ref
+        run: build.sh docs

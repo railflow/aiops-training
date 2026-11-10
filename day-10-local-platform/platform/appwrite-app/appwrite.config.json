@@ -1,0 +1,23 @@
+{
+  "projectId": "REPLACE_WITH_PROJECT_ID",
+  "endpoint": "http://appwrite.localhost:8080/v1",
+  "functions": [
+    {
+      "$id": "guestbook",
+      "name": "guestbook",
+      "runtime": "python-3.12",
+      "path": "functions/guestbook",
+      "entrypoint": "src/main.py",
+      "commands": "",
+      "execute": ["any"],
+      "events": [],
+      "schedule": "",
+      "timeout": 15,
+      "enabled": true,
+      "logging": true,
+      "ignore": ["tests", "__pycache__", ".pytest_cache"],
+      "scopes": [],
+      "vars": []
+    }
+  ]
+}

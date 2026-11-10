@@ -1,0 +1,60 @@
+# Requires a CNI that ENFORCES NetworkPolicy (Calico from Day 6; kindnet silently ignores these).
+# 1. Deny everything. 2. Agent pods: DNS, Forgejo, and HTTPS to the public internet only (the model API), never to private ranges (no cluster, no ClickHouse, no other pods).
+# LIMITATION: NetworkPolicy matches IPs, not hostnames. "HTTPS to the public internet" is wider than "api.<vendor>.com". A real allowlist needs an egress proxy,
+# a gateway pod you control (Day 29 gateway section: point the agent's base URL at it), or Cilium/Calico FQDN policy (check their docs; some are paid features).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: capstone}
+spec: {podSelector: {}, policyTypes: [Ingress, Egress]}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: agent-egress, namespace: capstone}
+spec:
+  podSelector: {matchLabels: {app: agent}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: platform}}
+          podSelector: {matchLabels: {app: forgejo}}
+      ports: [{port: 3000, protocol: TCP}]
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 100.64.0.0/10]
+      ports: [{port: 443, protocol: TCP}]
+---
+# The trusted evaluate Job: Forgejo to clone, ClickHouse to ship the measurement row. No internet.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: eval-egress, namespace: capstone}
+spec:
+  podSelector: {matchLabels: {app: evaluate}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: platform}}
+          podSelector: {matchLabels: {app: forgejo}}
+      ports: [{port: 3000, protocol: TCP}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: observability}}
+          podSelector: {matchLabels: {app: clickhouse}}
+      ports: [{port: 8123, protocol: TCP}]
+---
+# The worker and the webhook receiver are OUR code, not the agent's: allow them out (Temporal, Forgejo, ClickHouse, the Kubernetes API) and the webhook in.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: control-plane-pods, namespace: capstone}
+spec:
+  podSelector: {matchExpressions: [{key: app, operator: In, values: [capstone-worker, capstone-webhook]}]}
+  policyTypes: [Egress, Ingress]
+  egress: [{}]
+  ingress:
+    - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: platform}}      # Forgejo calls the webhook
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}   # Traefik, if it runs here in your cluster: check where yours lives
+      ports: [{port: 8000, protocol: TCP}]

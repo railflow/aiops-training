@@ -1,0 +1,11 @@
+# Pod Security Admission: enforce the "restricted" profile for every pod created in this namespace.
+# warn and audit labels make the API server say so before you hit enforce: useful when rolling the policy out.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hardened
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

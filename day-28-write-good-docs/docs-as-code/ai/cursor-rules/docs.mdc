@@ -1,0 +1,13 @@
+---
+description: Writing and editing documentation pages in this repository
+globs: docs/**/*.md,docs/**/*.mdx,**/README.md
+alwaysApply: false
+---
+
+Follow `docs-as-code/style-guide.md`.
+
+- One Diataxis type per page (tutorial, how-to, reference, explanation), named in the front matter.
+- Professional, direct tone. No hype words. No secrets in any example.
+- Commands are copy-pasteable; un-run output is labelled "example output".
+- Relative links only; run `build.sh docs` to check them.
+- When unsure of a flag, key or version, write "check the docs" instead of guessing.

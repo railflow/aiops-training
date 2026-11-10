@@ -1,0 +1,30 @@
+# Default deny, then allow: Traefik in, DNS out, and (when the platform provisioned them) Postgres out.
+# Enforced only by a CNI that implements NetworkPolicy (Calico in Day 6). Review before you rely on it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: __APP__}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-traefik-in, namespace: __APP__}
+spec:
+  podSelector: {matchLabels: {app: __APP__}}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: traefik}}}]
+      ports: [{port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: allow-dns-and-platform-data-out, namespace: __APP__}
+spec:
+  podSelector: {matchLabels: {app: __APP__}}
+  policyTypes: [Egress]
+  egress:
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}}]
+      ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+    - to: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: platform-data}}}]
+      ports: [{port: 5432}, {port: 8333}, {port: 4222}]

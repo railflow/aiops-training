@@ -1,0 +1,21 @@
+# Turns the dashboard JSON files into labelled ConfigMaps that Grafana's sidecar loads.
+#   kubectl apply -k day-19-observability-dashboards/dashboards
+# Dashboards live in the "grafana" namespace, in a folder named by the grafana_folder annotation.
+namespace: grafana
+generatorOptions:
+  disableNameSuffixHash: true
+  labels:
+    grafana_dashboard: "1"
+configMapGenerator:
+  - name: dashboard-service-overview-red
+    files: [grafana/service-overview-red.json]
+    options: {annotations: {grafana_folder: "Applications"}}
+  - name: dashboard-logs-and-traces
+    files: [grafana/logs-and-traces.json]
+    options: {annotations: {grafana_folder: "Applications"}}
+  - name: dashboard-kubernetes-infra
+    files: [grafana/kubernetes-infra.json]
+    options: {annotations: {grafana_folder: "Platform"}}
+  - name: dashboard-golden-signals-home
+    files: [grafana/golden-signals-home.json]
+    options: {annotations: {grafana_folder: "Home"}}

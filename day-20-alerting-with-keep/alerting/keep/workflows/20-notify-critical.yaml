@@ -1,0 +1,46 @@
+# The ONE place that decides who hears about an alert. Everything (ClickHouse workflows, Gatus,
+# Grafana) sends alerts INTO Keep; only this workflow (and 30-/40-) sends messages OUT.
+# Local sinks: Mailpit (email) and an echo service (generic webhook). See day-20-alerting-with-keep/alerting/sinks.yaml.
+# The on-call addresses in consts are rewritten by oncall/rotate.py from oncall/schedule.json.
+workflow:
+  id: notify-critical
+  name: "Notify on-call about critical and high alerts"
+  description: "Email the primary on-call and post to the webhook sink whenever a critical or high alert changes status."
+  consts:
+    primary: "alice@heyjob.local"
+    secondary: "bob@heyjob.local"
+  triggers:
+    - type: alert
+      cel: severity == "critical" || severity == "high"
+      only_on_change:
+        - status
+  actions:
+    - name: email-primary
+      provider:
+        type: smtp
+        config: "{{ providers.mailpit }}"
+        with:
+          from_email: "keep@heyjob.local"
+          from_name: "Keep alerts"
+          to_email:
+            - "{{ consts.primary }}"
+          subject: "[{{ alert.status }}] {{ alert.severity }}: {{ alert.name }}"
+          body: |
+            {{ alert.description }}
+
+            Service: {{ alert.service }}
+            Severity: {{ alert.severity }}
+            Status: {{ alert.status }}
+            Runbook: {{ alert.labels.runbook }}
+            Source: {{ alert.source }}
+    - name: webhook-sink
+      provider:
+        type: webhook
+        config: "{{ providers.echo-sink }}"
+        with:
+          body:
+            name: "{{ alert.name }}"
+            status: "{{ alert.status }}"
+            severity: "{{ alert.severity }}"
+            service: "{{ alert.service }}"
+            runbook: "{{ alert.labels.runbook }}"

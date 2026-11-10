@@ -1,0 +1,1 @@
+# No third-party dependencies: the lab must run offline. A real repository would list some here.

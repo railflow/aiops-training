@@ -1,0 +1,57 @@
+# Gatus as a plain Deployment + ConfigMap + Service + Ingress. We mount the config DIRECTORY (not a single file) because
+# Gatus reloads the file on change and the README warns that updates may be missed when a single file is bind-mounted.
+# Probes are plain TCP checks on the port: Gatus's own health path is not documented in its README, so we do not guess one.
+# The image tag is pinned in tools/versions.env (GATUS_IMAGE). Compare with the community chart (helm repo add twin
+# https://twin.github.io/helm-charts, chart twin/gatus) if you prefer Helm; the chart's app version lagged the release when checked.
+apiVersion: v1
+kind: Namespace
+metadata: {name: gatus}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: gatus, namespace: gatus, labels: {app: gatus}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: gatus}}
+  template:
+    metadata: {labels: {app: gatus}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: gatus
+          image: ghcr.io/twin/gatus:v5.38.0
+          ports: [{name: http, containerPort: 8080}]
+          env:
+            - name: GATUS_CONFIG_PATH
+              value: /config
+            - name: KEEP_API_KEY
+              valueFrom: {secretKeyRef: {name: gatus-keep, key: KEEP_API_KEY}}
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+          readinessProbe: {tcpSocket: {port: http}, periodSeconds: 10}
+          livenessProbe: {tcpSocket: {port: http}, periodSeconds: 20, failureThreshold: 3}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 20m, memory: 48Mi}
+            limits: {memory: 192Mi}
+      volumes:
+        - name: config
+          configMap: {name: gatus-config}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: gatus, namespace: gatus}
+spec:
+  selector: {app: gatus}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: gatus, namespace: gatus}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: status.localhost
+      http:
+        paths:
+          - {path: /, pathType: Prefix, backend: {service: {name: gatus, port: {name: http}}}}

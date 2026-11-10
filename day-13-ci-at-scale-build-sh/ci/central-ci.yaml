@@ -1,0 +1,23 @@
+# The whole workflow. All logic lives in build.sh and the builder image.
+# Copy to .forgejo/workflows/ci.yaml in each repo (or call it as a reusable workflow).
+name: ci
+on: [push]
+jobs:
+  ci:
+    runs-on: docker
+    container:
+      image: nexus.platform.svc.cluster.local:5000/builder:1
+    env:
+      REGISTRY: nexus.platform.svc.cluster.local:5000
+      BUILDKIT_HOST: tcp://buildkitd.platform.svc.cluster.local:1234
+      TAG: ${{ github.sha }}
+      PUSH: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, test, secure
+        run: build.sh build test secure
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: reports
+          path: reports/

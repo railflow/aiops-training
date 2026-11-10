@@ -1,0 +1,18 @@
+# The job runs inside a builder image that already contains node_modules (see node-hello/Dockerfile.builder).
+# Build and push the builder image first (lesson), then this job has nothing to download.
+name: deps-baked
+on: [push]
+jobs:
+  node:
+    runs-on: docker
+    container:
+      image: nexus.platform.svc.cluster.local:5000/builder-node:1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run with baked dependencies (timed)
+        working-directory: deps/node-hello
+        run: |
+          start=$(date +%s)
+          ln -s /opt/deps/node_modules node_modules
+          node index.js
+          echo "no install step; took $(( $(date +%s) - start ))s"

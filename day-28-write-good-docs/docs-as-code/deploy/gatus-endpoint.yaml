@@ -1,0 +1,10 @@
+# Add under `endpoints:` in the Gatus config (Day 21).
+- name: docs
+  group: platform
+  url: http://docs.docs.svc.cluster.local/healthz
+  interval: 30s
+  conditions:
+    - "[STATUS] == 200"
+    - "[RESPONSE_TIME] < 300"
+  alerts:
+    - type: custom

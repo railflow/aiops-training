@@ -1,0 +1,78 @@
+# Gateway collector: the single front door for all telemetry, writing to ClickHouse.
+# Helm chart: open-telemetry/opentelemetry-collector. Always compare with `helm show values`:
+#   helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+#   helm show values open-telemetry/opentelemetry-collector | less
+# The ClickHouse password comes from the Secret created in the lab (never from this file).
+mode: deployment
+replicaCount: 1
+fullnameOverride: otel-gateway
+
+# The "contrib" distribution contains the clickhouse exporter and many receivers; the core one does not.
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+extraEnvs:
+  - name: CLICKHOUSE_PASSWORD
+    valueFrom:
+      secretKeyRef: {name: clickhouse-credentials, key: password}
+
+# Open only what we use (the chart enables several legacy protocols by default).
+ports:
+  otlp: {enabled: true}
+  otlp-http: {enabled: true}
+  jaeger-compact: {enabled: false}
+  jaeger-thrift: {enabled: false}
+  jaeger-grpc: {enabled: false}
+  zipkin: {enabled: false}
+
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {memory: 512Mi}
+
+config:
+  receivers:
+    # The chart ships these by default; null removes them so nothing unused is configured.
+    jaeger: null
+    zipkin: null
+    prometheus: null
+    otlp:
+      protocols:
+        grpc: {endpoint: "0.0.0.0:4317"}
+        http: {endpoint: "0.0.0.0:4318"}
+  processors:
+    memory_limiter:
+      check_interval: 1s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    batch:
+      timeout: 5s
+      send_batch_size: 5000
+  exporters:
+    debug:
+      verbosity: basic
+    clickhouse:
+      endpoint: tcp://clickhouse.observability:9000?dial_timeout=10s
+      database: otel
+      username: otel
+      password: ${env:CLICKHOUSE_PASSWORD}
+      create_schema: true
+      ttl: 72h
+      timeout: 10s
+      retry_on_failure: {enabled: true, initial_interval: 5s, max_interval: 30s, max_elapsed_time: 300s}
+      sending_queue: {queue_size: 1000}
+      logs_table_name: otel_logs
+      traces_table_name: otel_traces
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [debug, clickhouse]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [debug, clickhouse]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [debug, clickhouse]

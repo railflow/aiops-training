@@ -1,0 +1,32 @@
+# OOMKill demo: a 64Mi memory LIMIT. /alloc?mb=100 keeps 100 MB, so the kernel kills the container,
+# the kubelet restarts it, and `kubectl describe pod` shows "Last State: Terminated, Reason: OOMKilled".
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: shop-oom, namespace: apps, labels: {app: shop-oom}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: shop-oom}}
+  template:
+    metadata: {labels: {app: shop-oom}}
+    spec:
+      containers:
+        - name: shop
+          image: shop-observability:1.0
+          imagePullPolicy: IfNotPresent
+          # Run the app as PID 1 (no gunicorn master) so that an OOM kill ends the CONTAINER, which is
+          # what the kubelet reports as OOMKilled. With gunicorn, the master would survive and respawn the worker.
+          command: ["python", "-c", "import app; app.app.run(host='0.0.0.0', port=8080, threaded=True)"]
+          ports: [{containerPort: 8080}]
+          env:
+            - {name: OTEL_SERVICE_NAME, value: shop-oom}
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 5}
+          resources:
+            requests: {cpu: 20m, memory: 48Mi}
+            limits: {memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: shop-oom, namespace: apps}
+spec:
+  selector: {app: shop-oom}
+  ports: [{name: http, port: 80, targetPort: 8080}]

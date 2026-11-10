@@ -1,0 +1,41 @@
+# Same as kind-config.yaml, but without kind's default CNI (kindnet does NOT enforce NetworkPolicy)
+# so that Calico can be installed. Render and create like this (see docs/05):
+#   sed "s|__SHARED_DIR__|$HOME/kind-shared|" day-03-kind-kubernetes/k8s/kind-config-calico.yaml > day-03-kind-kubernetes/k8s/kind-config.local.yaml
+#   kind create cluster --config day-03-kind-kubernetes/k8s/kind-config.local.yaml
+#   kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.29.1/manifests/calico.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ai-ops-training
+networking:
+  disableDefaultCNI: true
+  podSubnet: 192.168.0.0/16
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP
+      - containerPort: 30090
+        hostPort: 30090
+        protocol: TCP
+      - containerPort: 30500
+        hostPort: 30500
+        protocol: TCP
+      - containerPort: 30300
+        hostPort: 30300
+        protocol: TCP
+      - containerPort: 30081
+        hostPort: 30081
+        protocol: TCP
+    extraMounts:
+      - hostPath: __SHARED_DIR__
+        containerPath: /shared

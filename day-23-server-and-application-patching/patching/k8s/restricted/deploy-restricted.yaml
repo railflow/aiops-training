@@ -1,0 +1,34 @@
+# The "after": non-root, no privilege escalation, no capabilities, read-only root filesystem, a seccomp profile,
+# no service account token it does not need, and resource limits. Passes the restricted profile.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: demo-restricted, namespace: hardened}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: demo-restricted}}
+  template:
+    metadata: {labels: {app: demo-restricted}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: app
+          image: localhost:30500/patch-demo:base-slim-hardened
+          ports: [{containerPort: 8080}]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {memory: 128Mi}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {sizeLimit: 16Mi}

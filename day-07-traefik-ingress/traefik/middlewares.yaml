@@ -1,0 +1,54 @@
+# (c) Traefik Middlewares (CRDs). Reference them as <namespace>-<name>@kubernetescrd from an Ingress annotation,
+# or as {name, namespace} from an IngressRoute.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-prefixes
+  namespace: apps
+spec:
+  stripPrefix:
+    prefixes:
+      - /py
+      - /go
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit
+  namespace: apps
+spec:
+  rateLimit:
+    average: 5      # requests per period (default period: 1s)
+    burst: 10
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: response-headers
+  namespace: apps
+spec:
+  headers:
+    customResponseHeaders:
+      X-Course: heyjob-training
+---
+# Needs a secret you create from the command line (never commit it); see the lesson:
+#   kubectl -n apps create secret generic basic-auth --from-file=users=./users.txt
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: basic-auth
+  namespace: apps
+spec:
+  basicAuth:
+    secret: basic-auth
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: https-redirect
+  namespace: apps
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+    port: "8443"    # the HOST port that kind maps to the node's 443

@@ -1,0 +1,2 @@
+{"id": "alert-4711", "name": "checkout-total-not-integer", "severity": "high", "service": "pricing", "fired_at": "2026-11-05T09:12:03Z",
+ "description": "Orders API returned 400: total_cents must be an integer (got 1699.15) for order o-88213"}

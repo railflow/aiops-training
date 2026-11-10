@@ -1,0 +1,27 @@
+{
+  "name": "raise-coverage-inventory",
+  "description": "Clone a repository, install its dependencies, run the tests, let an agent write one test file, and return the diff and the coverage.",
+  "workdir": "/work/repo",
+  "repo": {
+    "fixture": "task/sample-repo",
+    "url_env": "SANDBOX_TASK_REPO_URL",
+    "ref": "main"
+  },
+  "limits": { "timeout_s": 300, "cpu": 1, "memory_mb": 1024 },
+  "network": { "mode": "allow-list", "allow": ["pypi.org", "files.pythonhosted.org", "github.com"] },
+  "steps": [
+    "checkout",
+    "upload_tools",
+    "install",
+    "baseline",
+    "agent",
+    "verify",
+    "collect"
+  ],
+  "commands": {
+    "install": "python -m pip install -r requirements.txt",
+    "coverage": "python cov.py",
+    "diff": "git add -A && git diff --cached --no-color"
+  },
+  "agent_target_files": ["tests/test_generated_stock.py"]
+}

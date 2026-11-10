@@ -1,0 +1,360 @@
+{
+  "uid": "golden-signals-home",
+  "title": "Home: Golden signals (app + platform)",
+  "tags": [
+    "course",
+    "home"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "query": "SELECT DISTINCT ServiceName FROM otel.otel_traces WHERE $__timeFilter(Timestamp) ORDER BY 1",
+        "definition": "SELECT DISTINCT ServiceName FROM otel.otel_traces WHERE $__timeFilter(Timestamp) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 1
+      },
+      {
+        "name": "cluster",
+        "label": "Cluster",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-clickhouse-datasource",
+          "uid": "clickhouse"
+        },
+        "query": "SELECT DISTINCT ResourceAttributes['k8s.cluster.name'] FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) ORDER BY 1",
+        "definition": "SELECT DISTINCT ResourceAttributes['k8s.cluster.name'] FROM otel.otel_metrics_gauge WHERE $__timeFilter(TimeUnix) ORDER BY 1",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "App (what users feel)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Request rate (req/s)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "timeseries",
+          "rawSql": "SELECT $__timeInterval(Timestamp) AS time, ServiceName, count() / $__interval_s AS rps FROM otel.otel_traces WHERE $__timeFilter(Timestamp) AND SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND $__conditionalAll(ServiceName IN ($service), $service) GROUP BY time, ServiceName ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Error rate (%)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "timeseries",
+          "rawSql": "SELECT $__timeInterval(Timestamp) AS time, ServiceName, 100 * countIf(StatusCode IN ('Error', 'STATUS_CODE_ERROR')) / count() AS error_pct FROM otel.otel_traces WHERE $__timeFilter(Timestamp) AND SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND $__conditionalAll(ServiceName IN ($service), $service) GROUP BY time, ServiceName ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Latency p50 / p95 / p99 (ms)",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "timeseries",
+          "rawSql": "SELECT $__timeInterval(Timestamp) AS time, quantile(0.50)(Duration) / 1e6 AS p50, quantile(0.95)(Duration) / 1e6 AS p95, quantile(0.99)(Duration) / 1e6 AS p99 FROM otel.otel_traces WHERE $__timeFilter(Timestamp) AND SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND $__conditionalAll(ServiceName IN ($service), $service) GROUP BY time ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Platform (what the cluster is doing)",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Pod CPU (cores), top pods",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "timeseries",
+          "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, ResourceAttributes['k8s.pod.name'] AS series, avg(Value) AS value FROM otel.otel_metrics_gauge WHERE MetricName = 'k8s.pod.cpu.usage' AND $__timeFilter(TimeUnix) AND ResourceAttributes['k8s.namespace.name'] = 'apps' AND ResourceAttributes['k8s.cluster.name'] IN ($cluster) GROUP BY time, series ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Pod memory, top pods",
+      "description": "",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 8,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 0,
+          "queryType": "timeseries",
+          "rawSql": "SELECT $__timeInterval(TimeUnix) AS time, ResourceAttributes['k8s.pod.name'] AS series, avg(Value) AS value FROM otel.otel_metrics_gauge WHERE MetricName = 'k8s.pod.memory.working_set' AND $__timeFilter(TimeUnix) AND ResourceAttributes['k8s.namespace.name'] = 'apps' AND ResourceAttributes['k8s.cluster.name'] IN ($cluster) GROUP BY time, series ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Restarts and not-ready pods",
+      "description": "Compare with the latency panel above: do spikes line up with restarts or CPU?",
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "clickhouse"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 8,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "editorType": "sql",
+          "format": 1,
+          "queryType": "table",
+          "rawSql": "SELECT sum(r) AS restarts_in_range FROM (SELECT max(Value) - min(Value) AS r FROM otel.otel_metrics_gauge WHERE MetricName = 'k8s.container.restarts' AND $__timeFilter(TimeUnix) AND ResourceAttributes['k8s.cluster.name'] IN ($cluster) GROUP BY ResourceAttributes['k8s.pod.name'], ResourceAttributes['k8s.container.name'])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ],
+  "links": [
+    {
+      "title": "Service Overview (RED)",
+      "type": "link",
+      "url": "/d/service-overview-red",
+      "keepTime": true,
+      "includeVars": true,
+      "targetBlank": false,
+      "icon": "dashboard"
+    },
+    {
+      "title": "Application Logs & Traces",
+      "type": "link",
+      "url": "/d/logs-and-traces",
+      "keepTime": true,
+      "includeVars": true,
+      "targetBlank": false,
+      "icon": "dashboard"
+    },
+    {
+      "title": "Kubernetes / Infra",
+      "type": "link",
+      "url": "/d/kubernetes-infra",
+      "keepTime": true,
+      "includeVars": true,
+      "targetBlank": false,
+      "icon": "dashboard"
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

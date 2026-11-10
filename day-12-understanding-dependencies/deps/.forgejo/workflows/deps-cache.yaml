@@ -1,0 +1,20 @@
+# Same jobs with a runner-side cache. Cache keys come from the lockfile hash, so a changed
+# lockfile means a cache miss. Cache support depends on your Forgejo Runner version; see the lesson.
+name: deps-cache
+on: [push]
+jobs:
+  node:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('deps/node-hello/package-lock.json') }}
+      - name: Install and run (timed)
+        working-directory: deps/node-hello
+        run: |
+          start=$(date +%s)
+          npm ci --no-audit --no-fund
+          echo "npm ci took $(( $(date +%s) - start ))s"
+          node index.js

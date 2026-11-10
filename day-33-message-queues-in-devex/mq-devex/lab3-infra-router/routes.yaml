@@ -1,0 +1,36 @@
+# Routing rules for infrastructure requests. Evaluated top to bottom; first match wins. Change this file, restart the router, no code change.
+# match:    every key must match; a list means "any of these". Keys are looked up in the request data (kind is the request's kind).
+# action:   automate -> publish infra.work.<runner>;  human -> publish infra.human.<team> and wait;  reject -> say why.
+# then:     for action=human only: the runner to start once a human approves (omit it when a human does the whole job).
+# require:  data keys that must be present, otherwise the request is rejected with a useful message instead of failing halfway.
+routes:
+  - name: namespace-with-database-nonprod
+    match: {kind: k8s-namespace-rds, env: [dev, staging]}
+    require: [name, owner]
+    action: automate
+    runner: terraform
+
+  - name: namespace-with-database-prod
+    match: {kind: k8s-namespace-rds, env: [prod]}
+    require: [name, owner]
+    action: human
+    team: platform-oncall
+    then: terraform
+    sla_minutes: 240
+
+  - name: dns-record
+    match: {kind: dns-record}
+    require: [name, owner]
+    action: automate
+    runner: terraform
+
+  - name: new-cloud-account
+    match: {kind: aws-account}
+    require: [name, owner]
+    action: human
+    team: cloud-governance
+    sla_minutes: 2880
+
+default:
+  action: reject
+  reason: "no route for this kind; run `platform request kinds` to see what exists"

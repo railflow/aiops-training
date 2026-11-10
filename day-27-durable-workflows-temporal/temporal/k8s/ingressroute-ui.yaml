@@ -1,0 +1,15 @@
+# Web UI at http://temporal.localhost:8080 (the chart's Service is temporal-web:8080).
+# The UI can read and TERMINATE workflows: on anything but a laptop put the forward-auth middleware from Day 7 in front of it.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: temporal-ui
+  namespace: temporal
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`temporal.localhost`)
+      kind: Rule
+      services:
+        - name: temporal-web
+          port: 8080

@@ -1,0 +1,4 @@
+# Pinned to what this lab was run with (Nov 2026). Check the releases page before you bump.
+google-adk==2.13.0
+pytest==9.2.0
+pytest-cov==7.1.0

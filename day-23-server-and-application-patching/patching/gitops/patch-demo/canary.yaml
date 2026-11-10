@@ -1,0 +1,25 @@
+apiVersion: flagger.app/v1beta1
+kind: Canary
+metadata: {name: patch-demo}
+spec:
+  provider: traefik
+  targetRef: {apiVersion: apps/v1, kind: Deployment, name: patch-demo}
+  progressDeadlineSeconds: 120
+  service: {port: 80, targetPort: 8080}
+  analysis:
+    interval: 15s
+    threshold: 3
+    maxWeight: 50
+    stepWeight: 10
+    metrics:
+      - {name: request-success-rate, interval: 1m, thresholdRange: {min: 99}}
+      - {name: request-duration, interval: 1m, thresholdRange: {max: 500}}
+    webhooks:
+      - name: load-test
+        type: rollout
+        url: http://flagger-loadtester.podinfo/
+        timeout: 5s
+        metadata:
+          type: cmd
+          cmd: "hey -z 5m -q 10 -c 2 -host patch-demo.localhost http://traefik.traefik/"
+          logCmdOutput: "true"

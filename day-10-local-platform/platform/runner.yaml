@@ -1,0 +1,63 @@
+# Forgejo Runner with a Docker-in-Docker sidecar (privileged; learning only).
+# Day 13 replaces the Docker-in-Docker pattern with BuildKit for image builds.
+# Create the registration token first, never commit it:
+#   kubectl -n platform create secret generic runner-token --from-literal=token="$TOKEN"
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: runner-config, namespace: platform}
+data:
+  config.yml: |
+    log:
+      level: info
+    runner:
+      file: /data/.runner
+      capacity: 1
+      timeout: 3h
+    container:
+      network: host
+      docker_host: "-"
+  start.sh: |
+    #!/bin/sh
+    set -eu
+    cd /data
+    if [ ! -f /data/.runner ]; then
+      forgejo-runner register --no-interactive \
+        --instance "http://forgejo.platform.svc.cluster.local:3000" \
+        --token "$RUNNER_TOKEN" --name kind-runner \
+        --labels "docker:docker://node:20-bookworm,ubuntu-latest:docker://node:20-bookworm"
+    fi
+    exec forgejo-runner daemon --config /config/config.yml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: forgejo-runner, namespace: platform, labels: {app: forgejo-runner}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: forgejo-runner}}
+  template:
+    metadata: {labels: {app: forgejo-runner}}
+    spec:
+      containers:
+        - name: runner
+          image: code.forgejo.org/forgejo/runner:6
+          command: ["/bin/sh", "/config/start.sh"]
+          env:
+            - {name: DOCKER_HOST, value: "tcp://127.0.0.1:2375"}
+            - name: RUNNER_TOKEN
+              valueFrom: {secretKeyRef: {name: runner-token, key: token}}
+          volumeMounts:
+            - {name: config, mountPath: /config}
+            - {name: data, mountPath: /data}
+        - name: dind
+          image: docker:27-dind
+          args:
+            - "--insecure-registry=nexus.platform.svc.cluster.local:5000"
+          env:
+            - {name: DOCKER_TLS_CERTDIR, value: ""}
+          securityContext: {privileged: true}
+          resources: {limits: {memory: 2Gi}}
+      volumes:
+        - name: config
+          configMap: {name: runner-config}
+        - name: data
+          emptyDir: {}

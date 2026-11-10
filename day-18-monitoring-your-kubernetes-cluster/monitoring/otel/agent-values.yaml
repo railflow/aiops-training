@@ -1,0 +1,58 @@
+# AGENT collector: one pod per node (DaemonSet). Collects node, pod and container metrics from the
+# local kubelet and forwards them to the gateway from Day 17. Uses the chart's presets (the easy path);
+# agent-explicit-values.yaml shows the same thing written out by hand.
+# Verify keys with: helm show values open-telemetry/opentelemetry-collector | grep -n -A3 "kubeletMetrics\|hostMetrics\|kubernetesAttributes"
+mode: daemonset
+# The chart appends -agent for a DaemonSet, so the DaemonSet is named otel-agent.
+fullnameOverride: otel
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+presets:
+  kubeletMetrics: {enabled: true}
+  hostMetrics: {enabled: true}
+  kubernetesAttributes: {enabled: true}
+
+resources:
+  requests: {cpu: 50m, memory: 96Mi}
+  limits: {memory: 256Mi}
+
+# Drop the receivers the chart enables by default; this agent only forwards metrics it collects itself.
+config:
+  receivers:
+    jaeger: null
+    zipkin: null
+    prometheus: null
+    otlp: null
+    kubeletstats:
+      collection_interval: 20s
+      auth_type: serviceAccount
+      # kind's kubelet certificate is self-signed. LOCAL ONLY: real clusters should verify the kubelet
+      # certificate (ca_file, or the cluster CA) instead of skipping verification.
+      insecure_skip_verify: true
+      metric_groups: [node, pod, container]
+  processors:
+    memory_limiter:
+      check_interval: 5s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    # The cluster label: with hundreds of clusters in one store, this is what tells them apart.
+    resource/cluster:
+      attributes:
+        - {key: k8s.cluster.name, value: ai-ops-training, action: upsert}
+    batch:
+      timeout: 10s
+  exporters:
+    debug:
+      verbosity: basic
+    otlphttp/gateway:
+      endpoint: http://otel-gateway.observability:4318
+  service:
+    pipelines:
+      logs: null
+      traces: null
+      metrics:
+        receivers: [kubeletstats, hostmetrics]
+        processors: [memory_limiter, resource/cluster, batch]
+        exporters: [debug, otlphttp/gateway]

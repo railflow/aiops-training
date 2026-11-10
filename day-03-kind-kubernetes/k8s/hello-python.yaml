@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-py
+  labels:
+    app: hello-py
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-py
+  template:
+    metadata:
+      labels:
+        app: hello-py
+    spec:
+      containers:
+        - name: hello-py
+          image: hello-py:1.0
+          # The image was loaded into the cluster with `kind load docker-image`,
+          # never pushed to a registry, so never try to pull it.
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NAME
+              value: "Kubernetes"
+            - name: LOOP_SECONDS
+              value: "10"

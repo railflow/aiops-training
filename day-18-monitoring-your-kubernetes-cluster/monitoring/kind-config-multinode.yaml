@@ -1,0 +1,14 @@
+# OPTIONAL: a 3-node kind cluster (1 control plane + 2 workers). Every node is a Docker container with its
+# own kubelet and containerd, so this MULTIPLIES memory use (roughly 3x the idle footprint of one node).
+# Use a different cluster name so it does not touch ai-ops-training:
+#   kind create cluster --config day-18-monitoring-your-kubernetes-cluster/monitoring/kind-config-multinode.yaml
+#   kubectl --context kind-heyjob-multi get nodes
+#   kind delete cluster --name heyjob-multi
+# It has no Traefik host-port mapping; use kubectl port-forward for apps on it.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: heyjob-multi
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker

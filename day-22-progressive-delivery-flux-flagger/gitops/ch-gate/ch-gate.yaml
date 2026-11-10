@@ -1,0 +1,48 @@
+# Optional extra gate for Flagger (Day 22): asks ClickHouse whether the canary pods are healthy.
+#   kubectl create namespace gates
+#   kubectl -n gates create configmap ch-gate-code --from-file=gate.py
+#   create the Secret from the command line (value read from the Day 17 Secret, never typed):
+#     bash:        kubectl -n gates create secret generic ch-gate --from-literal=CLICKHOUSE_PASSWORD="$(kubectl -n observability get secret clickhouse-credentials -o jsonpath='{.data.password}' | base64 -d)"
+#   kubectl apply -f ch-gate.yaml
+# Learning setup: python:3.12-slim is a floating-ish tag (pin it by digest in the Container patching day).
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: ch-gate, namespace: gates}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: ch-gate}}
+  template:
+    metadata: {labels: {app: ch-gate}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: gate
+          image: python:3.12-slim
+          command: ["python", "/app/gate.py"]
+          env:
+            - {name: CLICKHOUSE_URL, value: "http://clickhouse.observability:8123"}
+            - {name: CLICKHOUSE_USER, value: otel}
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom: {secretKeyRef: {name: ch-gate, key: CLICKHOUSE_PASSWORD}}
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /, port: http}, periodSeconds: 10}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 10m, memory: 32Mi}, limits: {memory: 96Mi}}
+          volumeMounts: [{name: code, mountPath: /app, readOnly: true}]
+      volumes:
+        - name: code
+          configMap: {name: ch-gate-code}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: ch-gate, namespace: gates}
+spec:
+  selector: {app: ch-gate}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+# Example webhook to add to a Canary's analysis.webhooks (for an app whose spans carry k8s.pod.name):
+#   - name: clickhouse-error-gate
+#     type: rollout
+#     url: http://ch-gate.gates/
+#     timeout: 15s
+#     metadata: {service: shop-frontend, max_error_pct: "5", minutes: "2", min_requests: "20"}

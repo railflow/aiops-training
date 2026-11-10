@@ -1,0 +1,12 @@
+name: hello
+on: [push]
+jobs:
+  hello:
+    runs-on: docker
+    steps:
+      - uses: actions/checkout@v4
+      - name: Say hello
+        run: |
+          echo "Hello from a Forgejo Actions job"
+          uname -a
+          ls -la

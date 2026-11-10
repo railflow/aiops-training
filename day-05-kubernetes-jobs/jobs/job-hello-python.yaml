@@ -1,0 +1,18 @@
+# Runs the Day 2 one-shot hello.py to completion. Compare with the Deployment that crash-looped in Day 3.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hello-python
+spec:
+  backoffLimit: 2                  # retry a failing pod at most 2 times
+  ttlSecondsAfterFinished: 600     # delete the finished Job (and its pods) after 10 minutes
+  template:
+    spec:
+      restartPolicy: Never         # Jobs require Never or OnFailure
+      containers:
+        - name: hello
+          image: hello-py:1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NAME
+              value: "Job"

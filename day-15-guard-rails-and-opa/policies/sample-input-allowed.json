@@ -1,0 +1,8 @@
+{
+  "service": "hello-py",
+  "image": "nexus.platform.svc.cluster.local:5000/hello-py-app:abc1234",
+  "coverage": 85.0,
+  "vulnerabilities": {"critical": 0, "high": 0},
+  "timezone": "America/Los_Angeles",
+  "now_ns": 1793854800000000000
+}

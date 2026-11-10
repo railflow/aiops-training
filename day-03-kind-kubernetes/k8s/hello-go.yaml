@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-go
+  labels:
+    app: hello-go
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-go
+  template:
+    metadata:
+      labels:
+        app: hello-go
+    spec:
+      containers:
+        - name: hello-go
+          image: hello-go:1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NAME
+              value: "Kubernetes"
+            - name: LOOP_SECONDS
+              value: "10"

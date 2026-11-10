@@ -1,0 +1,3 @@
+{"error_log_samples": ["400 total_cents must be an integer (got 1699.15)", "400 total_cents must be an integer (got 424.5)"],
+ "first_seen": "2026-11-05T09:10:41Z", "count_last_hour": 37, "deploys_last_24h": [{"sha": "c0ffee1", "at": "2026-11-05T08:55:00Z", "change": "pricing: float discounts"}],
+ "same_error_before_deploy": 0}

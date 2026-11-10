@@ -1,0 +1,51 @@
+# Baseline measurement of every repo in repos.csv as ONE Indexed Job: completions = number of repos, parallelism = how many run at once.
+# LAPTOP: keep parallelism at 2-3. Each pod runs a repo's tests (Maven downloads, npm installs): that is real CPU, memory and network.
+#   kubectl -n capstone create configmap repos-csv --from-file=repos.csv=../work/repos.csv
+#   kubectl -n capstone create configmap baseline-script --from-file=baseline.sh
+#   kubectl -n capstone create secret generic baseline --from-literal=FORGEJO_TOKEN=... --from-literal=CLICKHOUSE_PASSWORD=...
+#   sed 's/__COUNT__/5/' baseline-job.yaml | kubectl apply -f -
+# Link: Day 5 (Jobs). The same job as a Temporal fan-out is MeasureRepoWorkflow in ../workflows.
+apiVersion: batch/v1
+kind: Job
+metadata: {name: baseline, namespace: capstone, labels: {app: evaluate}}
+spec:
+  completionMode: Indexed
+  completions: __COUNT__
+  parallelism: 3
+  backoffLimit: 6
+  backoffLimitPerIndex: 1
+  maxFailedIndexes: 10
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 7200
+  template:
+    metadata: {labels: {app: evaluate}}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: capstone-agent
+      automountServiceAccountToken: false
+      priorityClassName: capstone-agent
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: measure
+          image: nexus.platform.svc.cluster.local:5000/measure:1
+          command: ["/bin/bash", "/config/baseline.sh"]
+          env:
+            - {name: FORGEJO_URL, value: "http://forgejo.platform.svc.cluster.local:3000"}
+            - {name: CLICKHOUSE_URL, value: "http://clickhouse.observability.svc.cluster.local:8123"}
+            - {name: CLICKHOUSE_USER, value: capstone}
+            - {name: RUN_ID, value: baseline}
+          envFrom: [{secretRef: {name: baseline}}]
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 250m, memory: 512Mi}, limits: {cpu: "1", memory: 2Gi}}
+          volumeMounts:
+            - {name: config, mountPath: /config}
+            - {name: work, mountPath: /work}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: config
+          projected:
+            sources:
+              - configMap: {name: repos-csv}
+              - configMap: {name: baseline-script}
+        - {name: work, emptyDir: {sizeLimit: 3Gi}}
+        - {name: tmp, emptyDir: {sizeLimit: 2Gi}}

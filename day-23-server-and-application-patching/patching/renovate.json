@@ -1,0 +1,35 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "docker:pinDigests"],
+  "timezone": "America/Los_Angeles",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "schedule": ["at any time"],
+    "prPriority": 10
+  },
+  "kubernetes": {
+    "managerFilePatterns": ["/^k8s\\/.*\\.ya?ml$/"]
+  },
+  "packageRules": [
+    {
+      "description": "Patch-level updates of test-only tools are low risk: group them, still through CI",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "dev tool patches"
+    },
+    {
+      "description": "Major versions always need a human",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Base images: digest and patch bumps arrive as one reviewed PR a week",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["digest", "patch"],
+      "groupName": "base image refresh"
+    }
+  ]
+}

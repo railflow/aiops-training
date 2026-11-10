@@ -1,0 +1,9 @@
+# Copy this folder to apps/patch-demo/ in the hello-config repo and add a Flux Kustomization for it
+# (or extend the existing `apps` one). It shares the namespace and load tester that Day 22 created.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: podinfo
+resources:
+  - deployment.yaml
+  - ingressroute.yaml
+  - canary.yaml

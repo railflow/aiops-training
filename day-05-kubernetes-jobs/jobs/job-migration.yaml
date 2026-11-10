@@ -1,0 +1,48 @@
+# A schema migration as a Job: the SQL lives in a ConfigMap, psql applies it.
+# Written to be idempotent (IF NOT EXISTS), so running it twice is safe.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-migrations
+data:
+  001_add_greetings_index.sql: |
+    CREATE INDEX IF NOT EXISTS greetings_created_at_idx ON greetings (created_at);
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version    TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    INSERT INTO schema_migrations (version) VALUES ('001') ON CONFLICT DO NOTHING;
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate-001
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 900
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: postgres:16
+          command: ["psql", "-v", "ON_ERROR_STOP=1", "-f", "/migrations/001_add_greetings_index.sql"]
+          env:
+            - name: PGHOST
+              value: postgres.data
+            - name: PGDATABASE
+              value: app
+            - name: PGUSER
+              value: app
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: PGPASSWORD
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+      volumes:
+        - name: migrations
+          configMap:
+            name: db-migrations

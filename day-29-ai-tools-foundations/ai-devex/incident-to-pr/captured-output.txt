@@ -1,0 +1,10 @@
+[   0.00s] alert      id=alert-4711 name=checkout-total-not-integer
+[   0.00s] context    source=fixtures/context.json (real: read-only ClickHouse query) errors_last_hour=37
+[   0.00s] triage     label=code_defect probability=0.95
+[   0.36s] baseline   tests_failed=1 coverage=93.33
+[   0.36s] fix        files=pricing.py cost=0.0
+[   0.70s] measure    tests_failed=0 coverage=100.0 first_pass_ci=1
+[   0.70s] pr         written_to=~/aiops-training/day-29-ai-tools-foundations/ai-devex/incident-to-pr/out/pr.json note=no FORGEJO_* env: wrote the PR instead of opening it
+[   0.70s] review     decision=approve reviewer=mock:rule-based comments=diff is small, tests pass, coverage ok (mock rule-based reviewer)
+[   0.70s] human-gate status=decided by=dana
+[   0.70s] metrics    time_to_pr_s=0.704 cost_usd=0.0 calls=1 first_pass_ci=1 reviewer_decision=approve human_decision=approve reviewer_human_agree=True

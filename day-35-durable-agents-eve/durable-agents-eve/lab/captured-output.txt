@@ -1,0 +1,73 @@
+
+=== PLAIN LOOP: a person approved the pull request, then the process died before it ran ===
+  run 1: exit killed by SIGKILL; the approval was consumed: approval_consumed x1
+  run 2 (restart): exit 1; it redid the work and is asking again: approval_requested x2
+  run 3 (second click): exit 0: plain loop: finished billing-001: 5 steps done
+  ok: run_tests finished 6 times for 2 needed: every restart began at step 1
+  ok: the test file was written 3 times
+  ok: the human was asked three times for one pull request
+  ok: (one pull request, only because this tool is idempotent)
+
+=== PLAIN LOOP: crash after the pull request was created, with a non-idempotent tool ===
+  pull requests in the forge: 2
+  ok: two pull requests for one repository
+
+=== EVE, killed while parked at the approval gate ===
+  session wrun_01M6PKKSJV8KK... is parked on approval CHNd4MYHoQQ45pnc
+  ledger before the kill: run_tests, write_test_file, run_tests, git_commit
+  kill -9 on the whole server process group
+  server restarted (new process)
+  ok: the same approval request is still open after the restart
+  reply: finished billing-001: 5 steps done
+  ok: no finished step ran again
+  ok: one pull request
+  ok: the steps ran in two different processes (before and after the kill)
+
+=== EVE, process dies in the middle of a tool call (after its effect, before the step was saved) ===
+  ok: the server killed itself inside write_test_file
+  the interrupted call was recorded as: [{"callId":"call-4","outcome":"abandoned","reason":"step-interrupted"}]
+  write_test_file started 2x, finished 1x
+  ok: eve recorded the interrupted call as abandoned (step-interrupted)
+  ok: the steps before and after it ran once each
+  ok: the tool call ran again: eve told the model the call may not have taken effect, and the model repeated it
+  ok: one pull request, because write_test_file is idempotent
+
+=== EVE, process dies right after the pull request was created (idempotent tool) ===
+  ok: the server died inside open_pr, after the forge call
+  pull requests so far: 1
+  eve asks for approval again (zBXaM2rQjiNME6hR); the model wants to repeat the call. Approving.
+  reply: finished billing-003: 5 steps done; pull requests in the forge: 1
+  ok: ONE pull request: the stable key made the repeat harmless
+
+=== EVE, process dies right after the pull request was created (NAIVE tool, no dedupe) ===
+  ok: the server died inside open_pr, after the forge call
+  pull requests so far: 1
+  eve asks for approval again (IxS4GI0EUtEIbutv); the model wants to repeat the call. Approving.
+  reply: finished billing-003: 5 steps done; pull requests in the forge: 2
+  ok: TWO pull requests: durability did not make the naive tool exactly-once
+
+=== EVE workflow tool: retries with a delay, then a durable sleep that spans a kill -9 ===
+  ok: the step failed twice with RetryableError and succeeded on attempt 3
+  ok: the 12 s sleep is registered as a durable wait in the workflow store
+  kill -9 at +2.3s, during the 12 s sleep; waiting 14 s with the server dead
+  restarted; the run finished 0.3s after the restart. reply: finished ci-001: 1 steps done
+  ok: the timer had already elapsed while the process was dead, so the run continued at once
+  ok: the first step did not run again after the restart
+  ok: the step after the sleep ran once, in the new process
+
+=== EVE fan-out: 8 repositories, concurrency 4, kill -9 mid-run, one repository fails for good ===
+  kill -9 with 0 sessions finished, 4 in flight (16 tool steps done so far), 4 repositories not started
+  server restarted; the orchestrator did nothing special: it keeps polling the same session ids
+  repo-004: finished repo-004: 5 steps done
+  repo-001: finished repo-001: 5 steps done
+  repo-002: finished repo-002: 5 steps done
+  repo-003: finished repo-003: 5 steps done
+  repo-005: FAILED repo-005: run_tests returned an error
+  repo-006: finished repo-006: 5 steps done
+  repo-007: finished repo-007: 5 steps done
+  repo-008: finished repo-008: 5 steps done
+  ok: partial failure: exactly the injected repository failed
+  ok: 7 pull requests, one per healthy repository, none duplicated
+  ok: every healthy repository was committed exactly once
+
+all scenarios held

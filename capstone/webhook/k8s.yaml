@@ -1,0 +1,46 @@
+# Webhook receiver. Create the secret first (never put the value in git):
+#   kubectl -n capstone create secret generic webhook --from-literal=WEBHOOK_SECRET="$(openssl rand -hex 24)"
+# Forgejo (in-cluster) can call http://capstone-webhook.capstone.svc.cluster.local:8000/forgejo.
+# FORGEJO_ALLOWED_HOST_LIST: Forgejo blocks webhooks to private addresses by default; allow the cluster domain (check the Forgejo docs: [webhook] ALLOWED_HOST_LIST).
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: capstone-webhook, namespace: capstone, labels: {app: capstone-webhook}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: capstone-webhook}}
+  template:
+    metadata: {labels: {app: capstone-webhook}}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: app
+          image: capstone-webhook:1
+          imagePullPolicy: IfNotPresent
+          ports: [{name: http, containerPort: 8000}]
+          env:
+            - {name: TEMPORAL_ADDRESS, value: "temporal-frontend.temporal.svc.cluster.local:7233"}
+            - {name: TASK_QUEUE, value: "capstone"}
+            - name: WEBHOOK_SECRET
+              valueFrom: {secretKeyRef: {name: webhook, key: WEBHOOK_SECRET}}
+          readinessProbe: {httpGet: {path: /healthz, port: http}, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 10, periodSeconds: 20}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 20m, memory: 64Mi}, limits: {cpu: 200m, memory: 192Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: capstone-webhook, namespace: capstone}
+spec:
+  selector: {app: capstone-webhook}
+  ports: [{name: http, port: 8000, targetPort: http}]
+---
+# Optional: reach it from the laptop (curl tests, a Forgejo outside the cluster). Put it behind auth before anything but a laptop.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata: {name: capstone-webhook, namespace: capstone}
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`capstone-webhook.localhost`)
+      kind: Rule
+      services: [{name: capstone-webhook, port: 8000}]

@@ -1,0 +1,35 @@
+# Deployed by hand with kubectl in Day 11. The image tag is replaced by `kubectl set image`.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: hello-py-ci, namespace: apps, labels: {app: hello-py-ci}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: hello-py-ci}}
+  template:
+    metadata: {labels: {app: hello-py-ci}}
+    spec:
+      containers:
+        - name: hello-py
+          image: localhost:30500/hello-py-app:REPLACE_ME
+          ports: [{containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}, periodSeconds: 5}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: hello-py-ci, namespace: apps}
+spec:
+  selector: {app: hello-py-ci}
+  ports: [{name: http, port: 80, targetPort: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: hello-py-ci, namespace: apps}
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: hello-py-ci.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: hello-py-ci, port: {number: 80}}}

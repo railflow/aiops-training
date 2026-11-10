@@ -1,0 +1,55 @@
+# Shared S3-compatible object storage. MinIO's community repository is archived (checked 2026-11-05), so this uses
+# SeaweedFS, the store the Appwrite Helm chart also ships. Same single-replica caveats: evaluation only.
+# Secret `seaweedfs-admin` (keys s3-access-key, s3-secret-key) is created by bin/create-secrets.sh.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: seaweedfs, namespace: platform-data}
+spec:
+  serviceName: seaweedfs
+  replicas: 1
+  selector: {matchLabels: {app: seaweedfs}}
+  template:
+    metadata: {labels: {app: seaweedfs}}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: seaweedfs
+          image: chrislusf/seaweedfs:4.48
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              printf '{"identities":[{"name":"platform-admin","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' \
+                "$S3_ACCESS_KEY" "$S3_SECRET_KEY" > /tmp/s3.json
+              exec weed server -dir=/data -ip=127.0.0.1 -ip.bind=0.0.0.0 -s3 -s3.config=/tmp/s3.json -master.volumeSizeLimitMB=1024 -volume.max=0
+          env:
+            - name: S3_ACCESS_KEY
+              valueFrom: {secretKeyRef: {name: seaweedfs-admin, key: s3-access-key}}
+            - name: S3_SECRET_KEY
+              valueFrom: {secretKeyRef: {name: seaweedfs-admin, key: s3-secret-key}}
+            - {name: HOME, value: /tmp}
+          ports: [{name: s3, containerPort: 8333}]
+          readinessProbe: {httpGet: {path: /healthz, port: s3}, periodSeconds: 10}
+          livenessProbe: {httpGet: {path: /healthz, port: s3}, periodSeconds: 20, failureThreshold: 6}
+          resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {memory: 1Gi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 5Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: seaweedfs, namespace: platform-data}
+spec:
+  selector: {app: seaweedfs}
+  ports: [{name: s3, port: 8333, targetPort: s3}]

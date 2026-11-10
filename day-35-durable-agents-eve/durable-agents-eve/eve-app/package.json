@@ -1,0 +1,20 @@
+{
+  "name": "coverage-agent-eve",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "ai": "^7.0.137",
+    "eve": "1.0.0-rc.5",
+    "zod": "^4.0.0"
+  },
+  "scripts": {
+    "build": "eve build",
+    "start": "eve start",
+    "dev": "eve dev",
+    "info": "eve info"
+  }
+}

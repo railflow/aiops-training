@@ -1,0 +1,20 @@
+# Sends synthetic traces, then logs, to the gateway so you can prove the pipeline before real apps exist.
+# Image and flags: check https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/cmd/telemetrygen
+apiVersion: batch/v1
+kind: Job
+metadata: {name: telemetrygen, namespace: observability}
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: traces
+          image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.115.0
+          args: ["traces", "--otlp-endpoint", "otel-gateway.observability:4317", "--otlp-insecure",
+                 "--service", "telemetrygen", "--traces", "20", "--child-spans", "2"]
+        - name: logs
+          image: ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.115.0
+          args: ["logs", "--otlp-endpoint", "otel-gateway.observability:4317", "--otlp-insecure",
+                 "--service", "telemetrygen", "--logs", "20", "--body", "hello from telemetrygen"]

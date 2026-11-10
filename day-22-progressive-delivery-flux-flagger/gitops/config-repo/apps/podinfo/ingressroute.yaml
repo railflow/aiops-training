@@ -1,0 +1,12 @@
+# Users reach podinfo through Traefik at http://podinfo.localhost:8080. The "podinfo" TraefikService is created by Flagger:
+# it splits traffic between podinfo-primary and podinfo-canary by weight.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata: {name: podinfo, namespace: podinfo}
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`podinfo.localhost`)
+      kind: Rule
+      services:
+        - {name: podinfo, kind: TraefikService, port: 80}

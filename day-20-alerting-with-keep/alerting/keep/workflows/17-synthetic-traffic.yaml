@@ -1,0 +1,66 @@
+# Generated from queries/08-synthetic-traffic-flowing.sql. Compare the SQL to keep the two in sync.
+# Pattern: run a query every 60 seconds; if the condition holds create a firing alert, otherwise a
+# resolved alert with the same fingerprint (name + service), so Keep keeps one alert and updates its status.
+workflow:
+  id: alert-synthetic-traffic
+  name: "Alert: fewer than 50 k6 requests in 5 minutes"
+  description: "Runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/synthetic-traffic.md"
+  triggers:
+    - type: manual
+    - type: interval
+      value: 60
+  steps:
+    - name: query
+      provider:
+        type: clickhouse
+        config: "{{ providers.clickhouse-otel }}"
+        with:
+          query: |
+            SELECT count() AS k6_requests_5m
+            FROM otel.otel_traces
+            WHERE Timestamp > now() - INTERVAL 5 MINUTE
+              AND SpanKind IN ('Server', 'SPAN_KIND_SERVER')
+              AND ServiceName = 'shop-frontend'
+              AND (SpanAttributes['http.user_agent'] LIKE 'k6%' OR SpanAttributes['user_agent.original'] LIKE 'k6%');
+          single_row: "True"
+  actions:
+    - name: fire
+      if: "{{ steps.query.results.k6_requests_5m }} < 50"
+      provider:
+        type: keep
+        with:
+          override_source_with: clickhouse
+          fingerprint_fields:
+            - name
+            - service
+          alert:
+            name: "Synthetic traffic (k6) is not arriving"
+            status: firing
+            severity: info
+            service: shop-frontend
+            description: 'Only {{ steps.query.results.k6_requests_5m }} k6 requests reached shop-frontend in 5 minutes. The load loop may have stopped; the alerts built on it are blind until it is back.'
+            labels:
+              service: shop-frontend
+              cluster: ai-ops-training
+              team: shop
+              runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/synthetic-traffic.md
+    - name: resolve
+      if: "{{ steps.query.results.k6_requests_5m }} >= 50"
+      provider:
+        type: keep
+        with:
+          override_source_with: clickhouse
+          fingerprint_fields:
+            - name
+            - service
+          alert:
+            name: "Synthetic traffic (k6) is not arriving"
+            status: resolved
+            severity: info
+            service: shop-frontend
+            description: 'k6 traffic is flowing again.'
+            labels:
+              service: shop-frontend
+              cluster: ai-ops-training
+              team: shop
+              runbook: https://github.com/railflow/aiops-training/blob/main/day-20-alerting-with-keep/alerting/runbooks/synthetic-traffic.md

@@ -1,0 +1,31 @@
+# LAPTOP SAFETY: these numbers assume a Docker Desktop VM with roughly 8 CPUs and 12+ GB for the whole cluster. Lower them if your laptop is smaller.
+# The quota is the hard ceiling: when it is full, new Jobs are rejected (visible, safe) instead of starving Forgejo, Temporal and ClickHouse.
+apiVersion: v1
+kind: ResourceQuota
+metadata: {name: capstone, namespace: capstone}
+spec:
+  hard:
+    pods: "12"
+    count/jobs.batch: "40"
+    requests.cpu: "3"
+    requests.memory: 4Gi
+    limits.cpu: "6"
+    limits.memory: 8Gi
+---
+apiVersion: v1
+kind: LimitRange
+metadata: {name: defaults, namespace: capstone}
+spec:
+  limits:
+    - type: Container
+      default: {cpu: 500m, memory: 768Mi}
+      defaultRequest: {cpu: 100m, memory: 256Mi}
+      max: {cpu: "2", memory: 2Gi}
+---
+# Lower than everything else: if the node is short of memory, agents are evicted first, never the platform.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata: {name: capstone-agent}
+value: -100
+globalDefault: false
+description: "Capstone agent and measurement Jobs: expendable"

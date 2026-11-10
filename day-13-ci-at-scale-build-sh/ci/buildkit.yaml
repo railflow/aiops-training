@@ -1,0 +1,56 @@
+# Rootless BuildKit daemon for in-cluster image builds (no Docker socket, no privileged container).
+# Needs Linux user namespaces on the node; kind nodes on Docker Desktop may or may not allow this:
+# if the pod fails, see the troubleshooting table in the lesson.
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: buildkitd-config, namespace: platform}
+data:
+  buildkitd.toml: |
+    [registry."nexus.platform.svc.cluster.local:5000"]
+      http = true
+      insecure = true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: buildkitd, namespace: platform, labels: {app: buildkitd}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: buildkitd}}
+  template:
+    metadata:
+      labels: {app: buildkitd}
+    spec:
+      containers:
+        - name: buildkitd
+          image: moby/buildkit:v0.18.2-rootless
+          args:
+            - --addr
+            - tcp://0.0.0.0:1234
+            - --config
+            - /etc/buildkit/buildkitd.toml
+            - --oci-worker-no-process-sandbox
+          ports: [{containerPort: 1234}]
+          securityContext:
+            seccompProfile: {type: Unconfined}
+            appArmorProfile: {type: Unconfined}
+            runAsUser: 1000
+            runAsGroup: 1000
+          readinessProbe:
+            exec: {command: [buildctl, debug, workers]}
+            initialDelaySeconds: 5
+            periodSeconds: 20
+          volumeMounts:
+            - {name: config, mountPath: /etc/buildkit}
+            - {name: cache, mountPath: /home/user/.local/share/buildkit}
+      volumes:
+        - name: config
+          configMap: {name: buildkitd-config}
+        - name: cache
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: buildkitd, namespace: platform}
+spec:
+  selector: {app: buildkitd}
+  ports: [{name: grpc, port: 1234, targetPort: 1234}]

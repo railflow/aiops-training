@@ -1,0 +1,61 @@
+# External Secrets Operator wiring: how each namespace logs in to OpenBao (Kubernetes auth)
+# and which OpenBao keys become Kubernetes Secrets. No secret value appears in this file.
+# API versions: check `kubectl get crd externalsecrets.external-secrets.io -o jsonpath='{.spec.versions[*].name}'`.
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: hello-app, namespace: apps}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: postgres-eso, namespace: data}
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata: {name: openbao, namespace: apps}
+spec:
+  provider:
+    vault:
+      server: "http://openbao.openbao:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "hello-app"
+          serviceAccountRef: {name: hello-app}
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata: {name: openbao, namespace: data}
+spec:
+  provider:
+    vault:
+      server: "http://openbao.openbao:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "postgres"
+          serviceAccountRef: {name: postgres-eso}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata: {name: db-credentials, namespace: apps}
+spec:
+  refreshInterval: 30s
+  secretStoreRef: {name: openbao, kind: SecretStore}
+  target: {name: db-credentials, creationPolicy: Owner}
+  data:
+    - {secretKey: username, remoteRef: {key: hello-app/db, property: username}}
+    - {secretKey: password, remoteRef: {key: hello-app/db, property: password}}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata: {name: postgres-credentials, namespace: data}
+spec:
+  refreshInterval: 30s
+  secretStoreRef: {name: openbao, kind: SecretStore}
+  target: {name: postgres-credentials, creationPolicy: Owner}
+  data:
+    - {secretKey: POSTGRES_PASSWORD, remoteRef: {key: hello-app/db, property: password}}
