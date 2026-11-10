@@ -35,7 +35,7 @@ The lessons themselves, with all the explanations, are on the course site. These
 | [Day 7](/days/day-07-traefik-ingress/) | Traefik, one front door for your apps | 13 |
 | [Day 8](/days/day-08-security-and-supply-chain/) | Vulnerabilities and the software supply chain | 6 |
 | [Day 9](/days/day-09-build-tools-and-tests/) | Build tools, tests, and coverage | 2 |
-| [Day 10](/days/day-10-local-platform/) | A local enterprise-like platform (Forgejo and Nexus) | 63 |
+| [Day 10](/days/day-10-local-platform/) | A local enterprise-like platform (Forgejo and Nexus) | 68 |
 | [Day 11](/days/day-11-first-ci-and-kubectl/) | Your first CI pipeline, and how kubectl really works | 2 |
 | [Day 12](/days/day-12-understanding-dependencies/) | Understanding dependencies | 24 |
 | [Day 13](/days/day-13-ci-at-scale-build-sh/) | CI at scale with a central build.sh | 3 |
@@ -53,7 +53,7 @@ The lessons themselves, with all the explanations, are on the course site. These
 | [Day 25](/days/day-25-internal-platform/) | Building an internal platform for hosting apps and APIs | 0 |
 | [Day 26](/days/day-26-appwrite-hands-on/) | Appwrite hands-on - functions, databases and a laptop-built app | 0 |
 | [Day 27](/days/day-27-durable-workflows-temporal/) | Durable workflows with Temporal | 30 |
-| [Day 28](/days/day-28-write-good-docs/) | Writing good docs (and keeping them true) | 33 |
+| [Day 28](/days/day-28-write-good-docs/) | Writing good docs (and keeping them true) | 43 |
 | [Day 29](/days/day-29-ai-tools-foundations/) | AI tools for DevEx, foundations | 47 |
 | [Day 30](/days/day-30-ai-agents-and-sandboxes/) | Agents and sandboxes | 0 |
 | [Day 31](/days/day-31-ai-quality-specs-evals-decisions/) | Quality: specs, evals and decision models | 0 |

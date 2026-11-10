@@ -12,7 +12,7 @@ Homework for this day is in [`day-28-write-good-docs/homework.md`](https://githu
 
 ## What is in the folder
 
-33 files. Paths below are relative to the repo root unless noted.
+43 files. Paths below are relative to the repo root unless noted.
 
 ### day-28-write-good-docs/docs-as-code/
 
@@ -40,6 +40,11 @@ Homework for this day is in [`day-28-write-good-docs/homework.md`](https://githu
 | File | What it is | How the lesson uses it |
 |---|---|---|
 | `docs-as-code/app-docs-template/README.md` | Document: __APP__ |  |
+| `docs-as-code/app-docs-template/docs/api.md` | Document: __APP__ API |  |
+| `docs-as-code/app-docs-template/docs/architecture.md` | Document: __APP__ architecture |  |
+| `docs-as-code/app-docs-template/docs/runbook.md` | Document: __APP__ runbook |  |
+| `docs-as-code/app-docs-template/docs/adr/0000-template.md` | Document: NNNN. Title in the form of a decision |  |
+| `docs-as-code/app-docs-template/docs/adr/0001-record-architecture-decisions.md` | Document: 0001. Record architecture decisions |  |
 
 ### day-28-write-good-docs/docs-as-code/ci/
 
@@ -73,6 +78,11 @@ Homework for this day is in [`day-28-write-good-docs/homework.md`](https://githu
 | `docs-as-code/starlight-site/src/content.config.ts` | TypeScript/JavaScript source file. |  |
 | `docs-as-code/starlight-site/src/assets/logo-dark.svg` | Image. |  |
 | `docs-as-code/starlight-site/src/assets/logo-light.svg` | Image. |  |
+| `docs-as-code/starlight-site/src/content/docs/index.mdx` | Document: What is here |  |
+| `docs-as-code/starlight-site/src/content/docs/how-to/roll-back-a-deploy.md` | Document: Steps |  |
+| `docs-as-code/starlight-site/src/content/docs/reference/service-reference.md` | Document: Endpoints |  |
+| `docs-as-code/starlight-site/src/content/docs/start/overview.md` | Document: Organisation |  |
+| `docs-as-code/starlight-site/src/content/docs/start/why-docs-as-code.md` | title: Why docs live in git |  |
 | `docs-as-code/starlight-site/src/styles/custom.css` | Support file. |  |
 
 ### day-28-write-good-docs/docs-as-code/tests/

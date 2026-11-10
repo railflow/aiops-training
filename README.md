@@ -52,7 +52,7 @@ Days without sample files of their own (1, 24, 25, 26, 30, 31, 32) still have a 
 | Day 7 | [`day-07-traefik-ingress/`](day-07-traefik-ingress/) | 13 |
 | Day 8 | [`day-08-security-and-supply-chain/`](day-08-security-and-supply-chain/) | 6 |
 | Day 9 | [`day-09-build-tools-and-tests/`](day-09-build-tools-and-tests/) | 2 |
-| Day 10 | [`day-10-local-platform/`](day-10-local-platform/) | 63 |
+| Day 10 | [`day-10-local-platform/`](day-10-local-platform/) | 68 |
 | Day 11 | [`day-11-first-ci-and-kubectl/`](day-11-first-ci-and-kubectl/) | 2 |
 | Day 12 | [`day-12-understanding-dependencies/`](day-12-understanding-dependencies/) | 24 |
 | Day 13 | [`day-13-ci-at-scale-build-sh/`](day-13-ci-at-scale-build-sh/) | 3 |
@@ -70,7 +70,7 @@ Days without sample files of their own (1, 24, 25, 26, 30, 31, 32) still have a 
 | Day 25 | [`day-25-internal-platform/`](day-25-internal-platform/) | 0 |
 | Day 26 | [`day-26-appwrite-hands-on/`](day-26-appwrite-hands-on/) | 0 |
 | Day 27 | [`day-27-durable-workflows-temporal/`](day-27-durable-workflows-temporal/) | 30 |
-| Day 28 | [`day-28-write-good-docs/`](day-28-write-good-docs/) | 33 |
+| Day 28 | [`day-28-write-good-docs/`](day-28-write-good-docs/) | 43 |
 | Day 29 | [`day-29-ai-tools-foundations/`](day-29-ai-tools-foundations/) | 47 |
 | Day 30 | [`day-30-ai-agents-and-sandboxes/`](day-30-ai-agents-and-sandboxes/) | 0 |
 | Day 31 | [`day-31-ai-quality-specs-evals-decisions/`](day-31-ai-quality-specs-evals-decisions/) | 0 |

@@ -38,6 +38,11 @@ From [Day 10](/days/day-10-local-platform/): `day-10-local-platform/` (`platform
 | `app-template/renovate.json` | JSON data or configuration file. |  |
 | `app-template/requirements.txt` | Pinned Python dependencies for this folder. |  |
 | `app-template/.forgejo/workflows/ci.yaml` | YAML configuration. |  |
+| `app-template/docs/api.md` | Document: __APP__ API |  |
+| `app-template/docs/architecture.md` | Document: __APP__ architecture |  |
+| `app-template/docs/runbook.md` | Document: Runbook: __APP__ |  |
+| `app-template/docs/adr/0000-template.md` | Document: NNNN. Title in the form of a decision |  |
+| `app-template/docs/adr/0001-record-architecture-decisions.md` | Document: 0001. Record architecture decisions |  |
 | `app-template/k8s/deployment.yaml` | Kubernetes manifest defining Deployment. |  |
 | `app-template/k8s/ingressroute.yaml` | Kubernetes manifest defining IngressRoute. |  |
 | `app-template/k8s/namespace.yaml` | Kubernetes manifest defining Namespace `__APP__`. |  |
@@ -62,11 +67,6 @@ From [Day 10](/days/day-10-local-platform/): `day-10-local-platform/` (`platform
 | `appwrite-functions/net-probe/tests/test_main.py` | Automated tests for main. |  |
 | `appwrite-functions/node-hello/main.test.js` | Automated tests for main. |  |
 | `appwrite-functions/node-hello/package.json` | Node project manifest for node-hello. Scripts: test. |  |
-| `appwrite-functions/node-hello/src/main.js` | Appwrite Function (runtime node-22). Entrypoint: src/main.js. The executor calls the default export once per request. |  |
-| `appwrite-functions/python-hello/requirements.txt` | Pinned Python dependencies for this folder. |  |
-| `appwrite-functions/python-hello/src/main.py` | Appwrite Function (runtime python-3.12). Entrypoint: src/main.py. The runtime calls main(context) once per request. |  |
-| `appwrite-functions/python-hello/tests/fakectx.py` | A stand-in for the runtime's context object, mirroring the attributes the Open Runtimes Python runtime sets. |  |
-| `appwrite-functions/python-hello/tests/test_main.py` | Automated tests for main. |  |
 
 ## How to run it
 

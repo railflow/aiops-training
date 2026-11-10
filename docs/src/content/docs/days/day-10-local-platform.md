@@ -12,7 +12,7 @@ Homework for this day is in [`day-10-local-platform/homework.md`](https://github
 
 ## What is in the folder
 
-63 files. Paths below are relative to the repo root unless noted.
+68 files. Paths below are relative to the repo root unless noted.
 
 ### day-10-local-platform/platform/
 
@@ -39,6 +39,11 @@ Homework for this day is in [`day-10-local-platform/homework.md`](https://github
 | `platform/app-template/renovate.json` | JSON data or configuration file. |  |
 | `platform/app-template/requirements.txt` | Pinned Python dependencies for this folder. |  |
 | `platform/app-template/.forgejo/workflows/ci.yaml` | YAML configuration. |  |
+| `platform/app-template/docs/api.md` | Document: __APP__ API |  |
+| `platform/app-template/docs/architecture.md` | Document: __APP__ architecture |  |
+| `platform/app-template/docs/runbook.md` | Document: Runbook: __APP__ |  |
+| `platform/app-template/docs/adr/0000-template.md` | Document: NNNN. Title in the form of a decision |  |
+| `platform/app-template/docs/adr/0001-record-architecture-decisions.md` | Document: 0001. Record architecture decisions |  |
 | `platform/app-template/k8s/deployment.yaml` | Kubernetes manifest defining Deployment. |  |
 | `platform/app-template/k8s/ingressroute.yaml` | Kubernetes manifest defining IngressRoute. |  |
 | `platform/app-template/k8s/namespace.yaml` | Kubernetes manifest defining Namespace `__APP__`. |  |
